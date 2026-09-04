@@ -166,9 +166,10 @@ public final class PolicyEngine: @unchecked Sendable {
             }
         }
 
-        // Match executable path prefix
+        // Match executable path prefix with strict directory boundary safety
         if let rulePrefix = rule.executablePathPrefix {
-            guard process.executablePath.hasPrefix(rulePrefix) else {
+            let prefixWithSlash = rulePrefix.hasSuffix("/") ? rulePrefix : rulePrefix + "/"
+            guard process.executablePath == rulePrefix || process.executablePath.hasPrefix(prefixWithSlash) else {
                 return false
             }
         }

@@ -196,6 +196,7 @@ public final class EndpointSecurityService: @unchecked Sendable {
 
             // Guaranteed response: caching disabled (cache = false) so every attempt generates an event
             let res = es_respond_auth_result(client, message, authResult, false)
+            let responseStatus = (res == ES_RESPOND_RESULT_SUCCESS) ? "success" : "failed_code_\(res.rawValue)"
             if res != ES_RESPOND_RESULT_SUCCESS {
                 fputs("[VeloxEndpointSecurityService] CRITICAL: es_respond_auth_result failed with result: \(res.rawValue)\n", stderr)
             }
@@ -215,7 +216,8 @@ public final class EndpointSecurityService: @unchecked Sendable {
                 pid: procContext.pid,
                 parentPid: procContext.parentPid,
                 uid: procContext.uid,
-                decisionLatencyMicros: latencyMicros
+                decisionLatencyMicros: latencyMicros,
+                authResponseResult: responseStatus
             )
 
             logger.logEventAsync(event)

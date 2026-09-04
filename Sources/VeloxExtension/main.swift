@@ -53,8 +53,8 @@ switch startResult {
     case .success:
         logger.info("Endpoint Security client connected and subscribed to ES_EVENT_TYPE_AUTH_EXEC.")
     case .failure(let error):
-        logger.error("Failed to start Endpoint Security client: \(error)")
-        // In production extension, keep running or retry rather than crashing
+        logger.error("Failed to start Endpoint Security client: \(error). Exiting nonzero for supervised restart.")
+        exit(1)
 }
 
 dispatchMain()

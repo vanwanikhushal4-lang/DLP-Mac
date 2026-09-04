@@ -56,6 +56,17 @@ public enum FileSecurity {
                     details: "SECURITY REJECTION: Parent directory is a symlink: \(parentPath)"
                 )
             }
+            if parentStatBuf.st_uid != 0 {
+                return FileSecurityResult(
+                    isRootOwned: false,
+                    isProtectedFromNonRoot: false,
+                    isSymlink: false,
+                    posixPermissions: UInt16(parentStatBuf.st_mode & 0o7777),
+                    ownerUID: parentStatBuf.st_uid,
+                    ownerGID: parentStatBuf.st_gid,
+                    details: "SECURITY REJECTION: Parent directory is not owned by root (UID \(parentStatBuf.st_uid)): \(parentPath)"
+                )
+            }
             if (parentStatBuf.st_mode & (S_IWGRP | S_IWOTH)) != 0 {
                 return FileSecurityResult(
                     isRootOwned: false,
@@ -73,7 +84,8 @@ public enum FileSecurity {
         let mode = statBuf.st_mode
         let otherWrite = (mode & S_IWOTH) != 0
         let groupWrite = (mode & S_IWGRP) != 0
-        let isProtected = !isSymlink && !otherWrite && !groupWrite
+        // A file is ONLY protected if it is root-owned, not a symlink, and not group/world writable
+        let isProtected = isRoot && !isSymlink && !otherWrite && !groupWrite
 
         var details = "UID: \(statBuf.st_uid), GID: \(statBuf.st_gid), Mode: \(String(format: "%o", mode))"
         if !isRoot {

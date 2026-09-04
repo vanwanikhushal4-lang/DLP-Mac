@@ -234,7 +234,6 @@
 				BEB5B74EE94E620AA113B094 /* Sources */,
 				5BE4D83E1980B35328C77A0A /* Frameworks */,
 				5A24E7CDFBF4F76566325D92 /* Embed System Extensions */,
-				FCA75FC35A0882F672EF0F51 /* Embed Host Provisioning Profile */,
 			);
 			buildRules = (
 			);
@@ -292,7 +291,6 @@
 			buildPhases = (
 				7F3FA92FD695A30718A849FF /* Sources */,
 				B2C093E4271B4A9EAE419D41 /* Frameworks */,
-				FA14E4215461922C6788E92B /* Embed Extension Provisioning Profile */,
 			);
 			buildRules = (
 			);
@@ -371,42 +369,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-		};
-		FA14E4215461922C6788E92B /* Embed Extension Provisioning Profile */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Embed Extension Provisioning Profile";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "if [ -f \"${PROJECT_DIR}/Sources/VeloxExtension/embedded.provisionprofile\" ]; then\n  cp \"${PROJECT_DIR}/Sources/VeloxExtension/embedded.provisionprofile\" \"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/embedded.provisionprofile\"\nfi\n";
-		};
-		FCA75FC35A0882F672EF0F51 /* Embed Host Provisioning Profile */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Embed Host Provisioning Profile";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "if [ -f \"${PROJECT_DIR}/Sources/VeloxApp/embedded.provisionprofile\" ]; then\n  cp \"${PROJECT_DIR}/Sources/VeloxApp/embedded.provisionprofile\" \"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/embedded.provisionprofile\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -655,6 +617,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sources/VeloxApp/VeloxMacDLP.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = L7US4BH7Q2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -670,6 +633,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp;
 				PRODUCT_NAME = VeloxMacDLP;
+				PROVISIONING_PROFILE = "1B3C84E2-9A47-4952-B9CD-49D97E05C82A";
+				PROVISIONING_PROFILE_SPECIFIER = "Velox Mac DLP Host Profile";
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -700,6 +665,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sources/VeloxApp/VeloxMacDLP.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = L7US4BH7Q2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -715,6 +681,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp;
 				PRODUCT_NAME = VeloxMacDLP;
+				PROVISIONING_PROFILE = "1B3C84E2-9A47-4952-B9CD-49D97E05C82A";
+				PROVISIONING_PROFILE_SPECIFIER = "Velox Mac DLP Host Profile";
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -746,6 +714,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Sources/VeloxExtension/VeloxMacDLPSE.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = L7US4BH7Q2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -761,6 +730,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp.endpointsecurity;
 				PRODUCT_NAME = co.velox.macdlp.endpointsecurity;
+				PROVISIONING_PROFILE = "4A9F2184-7F89-4D78-BC84-5C0D80E9A5B3";
+				PROVISIONING_PROFILE_SPECIFIER = "Velox Mac DLP Endpoint Security Profile";
 				SDKROOT = macosx;
 				WRAPPER_EXTENSION = systemextension;
 			};
@@ -771,6 +742,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Sources/VeloxExtension/VeloxMacDLPSE.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = L7US4BH7Q2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -786,6 +758,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp.endpointsecurity;
 				PRODUCT_NAME = co.velox.macdlp.endpointsecurity;
+				PROVISIONING_PROFILE = "4A9F2184-7F89-4D78-BC84-5C0D80E9A5B3";
+				PROVISIONING_PROFILE_SPECIFIER = "Velox Mac DLP Endpoint Security Profile";
 				SDKROOT = macosx;
 				WRAPPER_EXTENSION = systemextension;
 			};

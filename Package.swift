@@ -24,13 +24,13 @@ let package = Package(
             name: "VeloxApp",
             dependencies: ["VeloxCore"],
             path: "Sources/VeloxApp",
-            exclude: ["Info.plist", "VeloxMacDLP.entitlements", "embedded.provisionprofile"]
+            exclude: ["Info.plist", "VeloxMacDLP.entitlements"]
         ),
         .executableTarget(
             name: "VeloxExtension",
             dependencies: ["VeloxCore"],
             path: "Sources/VeloxExtension",
-            exclude: ["Info.plist", "VeloxMacDLPSE.entitlements", "embedded.provisionprofile"]
+            exclude: ["Info.plist", "VeloxMacDLPSE.entitlements"]
         ),
         .testTarget(
             name: "VeloxCoreTests",

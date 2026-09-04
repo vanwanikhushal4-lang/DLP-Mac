@@ -32,26 +32,25 @@ targets:
       - path: Sources/VeloxExtension/main.swift
     info:
       path: Sources/VeloxExtension/Info.plist
+      properties:
+        CFBundlePackageType: SYSX
     entitlements:
       path: Sources/VeloxExtension/VeloxMacDLPSE.entitlements
       properties:
         com.apple.developer.endpoint-security.client: true
     dependencies:
       - target: VeloxCore
-    postBuildScripts:
-      - name: Embed Extension Provisioning Profile
-        script: |
-          if [ -f "${PROJECT_DIR}/Sources/VeloxExtension/embedded.provisionprofile" ]; then
-            cp "${PROJECT_DIR}/Sources/VeloxExtension/embedded.provisionprofile" "${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/embedded.provisionprofile"
-          fi
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp.endpointsecurity
         PRODUCT_NAME: co.velox.macdlp.endpointsecurity
         WRAPPER_EXTENSION: systemextension
+        CODE_SIGN_STYLE: "Manual"
         CODE_SIGN_ENTITLEMENTS: Sources/VeloxExtension/VeloxMacDLPSE.entitlements
         CODE_SIGN_IDENTITY: "Apple Development: Vikas Bhoir (JZFXU9DXS8)"
         DEVELOPMENT_TEAM: "L7US4BH7Q2"
+        PROVISIONING_PROFILE_SPECIFIER: "Velox Mac DLP Endpoint Security Profile"
+        PROVISIONING_PROFILE: "4A9F2184-7F89-4D78-BC84-5C0D80E9A5B3"
         ENABLE_HARDENED_RUNTIME: YES
         OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
 
@@ -76,19 +75,16 @@ targets:
         destination: custom
         subpath: Contents/Library/SystemExtensions
         codeSign: true
-    postBuildScripts:
-      - name: Embed Host Provisioning Profile
-        script: |
-          if [ -f "${PROJECT_DIR}/Sources/VeloxApp/embedded.provisionprofile" ]; then
-            cp "${PROJECT_DIR}/Sources/VeloxApp/embedded.provisionprofile" "${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/embedded.provisionprofile"
-          fi
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp
         PRODUCT_NAME: VeloxMacDLP
+        CODE_SIGN_STYLE: "Manual"
         CODE_SIGN_ENTITLEMENTS: Sources/VeloxApp/VeloxMacDLP.entitlements
         CODE_SIGN_IDENTITY: "Apple Development: Vikas Bhoir (JZFXU9DXS8)"
         DEVELOPMENT_TEAM: "L7US4BH7Q2"
+        PROVISIONING_PROFILE_SPECIFIER: "Velox Mac DLP Host Profile"
+        PROVISIONING_PROFILE: "1B3C84E2-9A47-4952-B9CD-49D97E05C82A"
         ENABLE_HARDENED_RUNTIME: YES
         OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
 

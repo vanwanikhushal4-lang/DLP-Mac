@@ -202,4 +202,46 @@ final class PolicyEngineTests: XCTestCase {
         print("Average in-memory policy evaluation time: \(averageMicroseconds) microseconds")
         XCTAssertLessThan(averageMicroseconds, 50.0, "Evaluation latency must be well under 50 microseconds")
     }
+
+    func testPathPrefixDirectoryBoundarySafety() {
+        let rule = ApplicationRule(ruleId: "block-safe-dir", executablePathPrefix: "/Applications/Safe")
+        let config = ApplicationControlConfig(mode: .enforce, blockedApplications: [rule])
+        let policy = VeloxPolicy(policyVersion: 1, applicationControl: config)
+        let engine = PolicyEngine(policy: policy)
+
+        // Exact match -> blocked
+        let exactProc = ProcessContext(
+            pid: 101, parentPid: 1, uid: 501, signingId: nil, teamId: nil,
+            isPlatformBinary: false, cdhash: nil, executablePath: "/Applications/Safe"
+        )
+        XCTAssertEqual(engine.evaluate(process: exactProc).decisionString, "blocked")
+
+        // Subdirectory child -> blocked
+        let childProc = ProcessContext(
+            pid: 102, parentPid: 1, uid: 501, signingId: nil, teamId: nil,
+            isPlatformBinary: false, cdhash: nil, executablePath: "/Applications/Safe/Helper"
+        )
+        XCTAssertEqual(engine.evaluate(process: childProc).decisionString, "blocked")
+
+        // Sibling path prefix extension (/Applications/SafeEvil) -> MUST NOT MATCH -> allowed
+        let evilProc = ProcessContext(
+            pid: 103, parentPid: 1, uid: 501, signingId: nil, teamId: nil,
+            isPlatformBinary: false, cdhash: nil, executablePath: "/Applications/SafeEvil"
+        )
+        XCTAssertEqual(engine.evaluate(process: evilProc).decisionString, "allowed", "Path prefix without slash boundary must not match sibling paths")
+    }
+
+    func testInsecureAllowRuleIsRejected() {
+        // Allow rule specifying only signingId without cryptographic constraint must be rejected
+        let insecureAllow = ApplicationRule(ruleId: "insecure-allow", signingId: "com.spoofable.app")
+        let config = ApplicationControlConfig(mode: .enforce, allowedApplications: [insecureAllow])
+        let policy = VeloxPolicy(policyVersion: 1, applicationControl: config)
+
+        XCTAssertThrowsError(try policy.validate()) { error in
+            guard case PolicyValidationError.insecureAllowRule = error else {
+                XCTFail("Expected PolicyValidationError.insecureAllowRule, got: \(error)")
+                return
+            }
+        }
+    }
 }

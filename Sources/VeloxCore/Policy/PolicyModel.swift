@@ -33,7 +33,7 @@ public struct ApplicationRule: Codable, Sendable, Equatable {
         self.executablePathPrefix = executablePathPrefix
     }
 
-    public func validate() throws {
+    public func validate(isAllowRule: Bool = false) throws {
         let trimmedRuleId = ruleId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedRuleId.isEmpty else {
             throw PolicyValidationError.emptyRuleId("Rule ID cannot be empty")
@@ -88,6 +88,16 @@ public struct ApplicationRule: Codable, Sendable, Equatable {
                            executablePathPrefix != nil
         guard hasCriterion else {
             throw PolicyValidationError.missingCriterion("Rule '\(ruleId)' must specify at least one valid matching criterion")
+        }
+
+        if isAllowRule {
+            // Require secure identity criteria: an allow rule based solely on signingId can be spoofed by ad-hoc binaries
+            if signingId != nil {
+                let hasSecureBinding = (teamId != nil) || (cdhash != nil) || (isPlatformBinary == true) || (executablePath != nil)
+                guard hasSecureBinding else {
+                    throw PolicyValidationError.insecureAllowRule("Allow rule '\(ruleId)' based solely on signingId is insecure. Allow rules must bind teamId, cdhash, isPlatformBinary, or exact executablePath to prevent ad-hoc spoofing.")
+                }
+            }
         }
     }
 }
@@ -187,9 +197,16 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         }
 
         var seenRuleIds = Set<String>()
-        let allRules = applicationControl.blockedApplications + applicationControl.allowedApplications
-        for rule in allRules {
-            try rule.validate()
+        for rule in applicationControl.allowedApplications {
+            try rule.validate(isAllowRule: true)
+            if seenRuleIds.contains(rule.ruleId) {
+                throw PolicyValidationError.duplicateRuleId("Duplicate ruleId '\(rule.ruleId)' detected")
+            }
+            seenRuleIds.insert(rule.ruleId)
+        }
+
+        for rule in applicationControl.blockedApplications {
+            try rule.validate(isAllowRule: false)
             if seenRuleIds.contains(rule.ruleId) {
                 throw PolicyValidationError.duplicateRuleId("Duplicate ruleId '\(rule.ruleId)' detected")
             }
@@ -209,6 +226,7 @@ public enum PolicyValidationError: Error, CustomStringConvertible, Equatable {
     case invalidCriterion(String)
     case unsafePathPrefix(String)
     case unknownProperty(String)
+    case insecureAllowRule(String)
 
     public var description: String {
         switch self {
@@ -222,6 +240,7 @@ public enum PolicyValidationError: Error, CustomStringConvertible, Equatable {
         case .invalidCriterion(let msg): return "Invalid Criterion: \(msg)"
         case .unsafePathPrefix(let msg): return "Unsafe Path Prefix: \(msg)"
         case .unknownProperty(let msg): return "Unknown Property: \(msg)"
+        case .insecureAllowRule(let msg): return "Insecure Allow Rule: \(msg)"
         }
     }
 }

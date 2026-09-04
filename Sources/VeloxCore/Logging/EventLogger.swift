@@ -16,6 +16,7 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
     public let parentPid: Int32
     public let uid: UInt32
     public let decisionLatencyMicros: UInt64
+    public let authResponseResult: String?
 
     public init(
         timestamp: String? = nil,
@@ -31,7 +32,8 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
         pid: Int32,
         parentPid: Int32,
         uid: UInt32,
-        decisionLatencyMicros: UInt64
+        decisionLatencyMicros: UInt64,
+        authResponseResult: String? = nil
     ) {
         if let ts = timestamp {
             self.timestamp = ts
@@ -53,6 +55,7 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
         self.parentPid = parentPid
         self.uid = uid
         self.decisionLatencyMicros = decisionLatencyMicros
+        self.authResponseResult = authResponseResult
     }
 }
 
@@ -109,26 +112,12 @@ public final class EventLogger: @unchecked Sendable {
         return handle
     }
 
-    /// Logs an event asynchronously on a background queue with bounded backpressure.
-    /// If the queue exceeds `maxQueueSize`, excess events are safely shed to protect memory.
+    /// Logs an event asynchronously on a background queue.
+    /// Guarantees that every execution attempt is recorded to disk without dropping.
     public func logEventAsync(_ event: ExecutionEvent) {
-        os_unfair_lock_lock(queueCounterLock)
-        if inFlightEventsCount >= EventLogger.maxQueueSize {
-            droppedEventsCount += 1
-            os_unfair_lock_unlock(queueCounterLock)
-            fputs("[VeloxEventLogger] Backpressure warning: In-flight logging queue full. Event shed.\n", stderr)
-            return
-        }
-        inFlightEventsCount += 1
-        os_unfair_lock_unlock(queueCounterLock)
-
         queue.async { [weak self] in
             guard let self = self else { return }
             self.writeEvent(event)
-
-            os_unfair_lock_lock(self.queueCounterLock)
-            self.inFlightEventsCount -= 1
-            os_unfair_lock_unlock(self.queueCounterLock)
         }
     }
 
