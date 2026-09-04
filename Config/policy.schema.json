@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VeloxApplicationControlPolicy",
+  "type": "object",
+  "required": ["policyVersion", "applicationControl"],
+  "additionalProperties": false,
+  "properties": {
+    "policyVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonically increasing version number for the policy."
+    },
+    "applicationControl": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"],
+          "description": "Operating mode for application control."
+        },
+        "blockedApplications": {
+          "type": "array",
+          "description": "List of application rules that should be blocked or audited.",
+          "items": {
+            "$ref": "#/$defs/ApplicationRule"
+          }
+        },
+        "allowedApplications": {
+          "type": "array",
+          "description": "List of application rules that are explicitly allowed (override block rules).",
+          "items": {
+            "$ref": "#/$defs/ApplicationRule"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "ApplicationRule": {
+      "type": "object",
+      "required": ["ruleId"],
+      "additionalProperties": false,
+      "properties": {
+        "ruleId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier for the rule."
+        },
+        "signingId": {
+          "type": ["string", "null"],
+          "description": "Code signing identifier (e.g., com.apple.calculator)."
+        },
+        "teamId": {
+          "type": ["string", "null"],
+          "description": "Apple Developer Team Identifier."
+        },
+        "isPlatformBinary": {
+          "type": ["boolean", "null"],
+          "description": "Whether the application is an Apple platform binary."
+        },
+        "cdhash": {
+          "type": ["string", "null"],
+          "description": "Hex-encoded Code Directory Hash."
+        },
+        "executablePath": {
+          "type": ["string", "null"],
+          "description": "Exact path to the executable."
+        },
+        "executablePathPrefix": {
+          "type": ["string", "null"],
+          "description": "Path prefix for executable location."
+        }
+      }
+    }
+  }
+}

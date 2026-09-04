@@ -1,0 +1,845 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		031AF3B7556CDE29AD555D1C /* PolicyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0B42A9DD8BC115FDE2AA6A /* PolicyManager.swift */; };
+		07160851501CFA85F6B9BB9D /* EndpointSecurityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81B64AFAF9DDCBE97E80E5EC /* EndpointSecurityService.swift */; };
+		2D713E9C6FEDED1FF66546F7 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E848C9198C7BDCF17BF943E0 /* AppDelegate.swift */; };
+		2E9C26D4C691ADFD2C3326D9 /* PolicyEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4117DBC130D0A3621353698 /* PolicyEngineTests.swift */; };
+		4C4670E42E506BD3C6B697A2 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9AF0561DB2E8BF7AC0EFC54 /* main.swift */; };
+		561F3DA5E9DDD6E8D5004005 /* FileSecurity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FEE5595D3E58E64956D34A /* FileSecurity.swift */; };
+		6E593BB721975922B813191E /* VeloxExtension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 528A941695824503AF88CEF7 /* VeloxExtension.systemextension */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		7D53196C3966701A36A148D5 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF46A124E99C346B960B335 /* main.swift */; };
+		7FF8AB80B6BCFBF3A807EEB0 /* EventLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8459957CCF679341C61B3D2C /* EventLogger.swift */; };
+		932CFBA95C3F752D573FC8A2 /* libVeloxCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82882244835FE33A8714983D /* libVeloxCore.a */; };
+		99343249A49421511AAF7834 /* libVeloxCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82882244835FE33A8714983D /* libVeloxCore.a */; };
+		9E19391BE6C90FD93C33A0DD /* PolicyModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECE0F4E4B48C74AF8C496E2E /* PolicyModel.swift */; };
+		AD63BC6D3D24AE03ED369E9F /* PolicyEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5237E6CF7500B33B4AB5F140 /* PolicyEngine.swift */; };
+		B56E8E4DE79C2610E7CFF742 /* PolicyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC11271361CC6422FC3471BA /* PolicyManagerTests.swift */; };
+		B9D72634EE601330AB924B67 /* EventLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D567B51591F3CFA2405621 /* EventLoggerTests.swift */; };
+		D5E90D876730FE2D32C483BF /* SecurityGuardianTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2950E1340C2F09426D65D40D /* SecurityGuardianTests.swift */; };
+		DC0893EE91F2C320157EE04A /* SecurityGuardian.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231CCD8D825D187ED70A36EC /* SecurityGuardian.swift */; };
+		EAD237DAAE2DF7EAD8E02815 /* libVeloxCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82882244835FE33A8714983D /* libVeloxCore.a */; };
+		F168C25071F87FA7EE01F690 /* ProcessContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FEE10A504ABC6F0D8877A06 /* ProcessContext.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0CFDA1FECE2166341600A8BA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5776E974B9C650680D4B7C64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4C8D6520D11426F91F6C0094;
+			remoteInfo = VeloxCore;
+		};
+		4D2B75460370B8B393B60EC1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5776E974B9C650680D4B7C64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D5AC70188B70DF6A00259046;
+			remoteInfo = VeloxExtension;
+		};
+		9A29EA1C8F9224BB28F1322A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5776E974B9C650680D4B7C64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4C8D6520D11426F91F6C0094;
+			remoteInfo = VeloxCore;
+		};
+		ED732B6B63F62F76894155E4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5776E974B9C650680D4B7C64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4C8D6520D11426F91F6C0094;
+			remoteInfo = VeloxCore;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5A24E7CDFBF4F76566325D92 /* Embed System Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				6E593BB721975922B813191E /* VeloxExtension.systemextension in Embed System Extensions */,
+			);
+			name = "Embed System Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0F0B42A9DD8BC115FDE2AA6A /* PolicyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyManager.swift; sourceTree = "<group>"; };
+		11D567B51591F3CFA2405621 /* EventLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLoggerTests.swift; sourceTree = "<group>"; };
+		231CCD8D825D187ED70A36EC /* SecurityGuardian.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityGuardian.swift; sourceTree = "<group>"; };
+		2950E1340C2F09426D65D40D /* SecurityGuardianTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityGuardianTests.swift; sourceTree = "<group>"; };
+		5237E6CF7500B33B4AB5F140 /* PolicyEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyEngine.swift; sourceTree = "<group>"; };
+		528A941695824503AF88CEF7 /* VeloxExtension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = VeloxExtension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		53E33542B0AB7A7D171F9828 /* VeloxCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VeloxCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6E8F9FBDB615BC30D8B9F318 /* VeloxMacDLP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VeloxMacDLP.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7FEE10A504ABC6F0D8877A06 /* ProcessContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessContext.swift; sourceTree = "<group>"; };
+		81B64AFAF9DDCBE97E80E5EC /* EndpointSecurityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndpointSecurityService.swift; sourceTree = "<group>"; };
+		82882244835FE33A8714983D /* libVeloxCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libVeloxCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		8459957CCF679341C61B3D2C /* EventLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLogger.swift; sourceTree = "<group>"; };
+		A9AF0561DB2E8BF7AC0EFC54 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		AC11271361CC6422FC3471BA /* PolicyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyManagerTests.swift; sourceTree = "<group>"; };
+		B9FEE5595D3E58E64956D34A /* FileSecurity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSecurity.swift; sourceTree = "<group>"; };
+		BEF46A124E99C346B960B335 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		C4117DBC130D0A3621353698 /* PolicyEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyEngineTests.swift; sourceTree = "<group>"; };
+		E848C9198C7BDCF17BF943E0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		ECE0F4E4B48C74AF8C496E2E /* PolicyModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyModel.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5BE4D83E1980B35328C77A0A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				99343249A49421511AAF7834 /* libVeloxCore.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9D3B97B59AEB665A1573114 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				932CFBA95C3F752D573FC8A2 /* libVeloxCore.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B2C093E4271B4A9EAE419D41 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EAD237DAAE2DF7EAD8E02815 /* libVeloxCore.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		05F5095A3B6FA39DAAB179F5 /* Policy */ = {
+			isa = PBXGroup;
+			children = (
+				5237E6CF7500B33B4AB5F140 /* PolicyEngine.swift */,
+				0F0B42A9DD8BC115FDE2AA6A /* PolicyManager.swift */,
+				ECE0F4E4B48C74AF8C496E2E /* PolicyModel.swift */,
+			);
+			path = Policy;
+			sourceTree = "<group>";
+		};
+		08DD0C5F7FA01CF696FB820F /* Logging */ = {
+			isa = PBXGroup;
+			children = (
+				8459957CCF679341C61B3D2C /* EventLogger.swift */,
+			);
+			path = Logging;
+			sourceTree = "<group>";
+		};
+		12F025A9477BC734C4C3C97A /* EndpointSecurity */ = {
+			isa = PBXGroup;
+			children = (
+				81B64AFAF9DDCBE97E80E5EC /* EndpointSecurityService.swift */,
+				7FEE10A504ABC6F0D8877A06 /* ProcessContext.swift */,
+			);
+			path = EndpointSecurity;
+			sourceTree = "<group>";
+		};
+		344DAFDF3D2B7B8562BEB003 = {
+			isa = PBXGroup;
+			children = (
+				7511E29F700D921C45019F82 /* VeloxApp */,
+				42FD3F452B8AEE71FDA48AE9 /* VeloxCore */,
+				DF252518CBE44A287C7E42DF /* VeloxCoreTests */,
+				C9A401257B30413129050DD2 /* VeloxExtension */,
+				D1D3A0DEF21422006454418B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		42FD3F452B8AEE71FDA48AE9 /* VeloxCore */ = {
+			isa = PBXGroup;
+			children = (
+				12F025A9477BC734C4C3C97A /* EndpointSecurity */,
+				08DD0C5F7FA01CF696FB820F /* Logging */,
+				05F5095A3B6FA39DAAB179F5 /* Policy */,
+				5E09B1D20E68AC22E22F41A8 /* Security */,
+			);
+			name = VeloxCore;
+			path = Sources/VeloxCore;
+			sourceTree = "<group>";
+		};
+		5E09B1D20E68AC22E22F41A8 /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				B9FEE5595D3E58E64956D34A /* FileSecurity.swift */,
+				231CCD8D825D187ED70A36EC /* SecurityGuardian.swift */,
+			);
+			path = Security;
+			sourceTree = "<group>";
+		};
+		7511E29F700D921C45019F82 /* VeloxApp */ = {
+			isa = PBXGroup;
+			children = (
+				E848C9198C7BDCF17BF943E0 /* AppDelegate.swift */,
+				BEF46A124E99C346B960B335 /* main.swift */,
+			);
+			name = VeloxApp;
+			path = Sources/VeloxApp;
+			sourceTree = "<group>";
+		};
+		C9A401257B30413129050DD2 /* VeloxExtension */ = {
+			isa = PBXGroup;
+			children = (
+				A9AF0561DB2E8BF7AC0EFC54 /* main.swift */,
+			);
+			name = VeloxExtension;
+			path = Sources/VeloxExtension;
+			sourceTree = "<group>";
+		};
+		D1D3A0DEF21422006454418B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				82882244835FE33A8714983D /* libVeloxCore.a */,
+				53E33542B0AB7A7D171F9828 /* VeloxCoreTests.xctest */,
+				528A941695824503AF88CEF7 /* VeloxExtension.systemextension */,
+				6E8F9FBDB615BC30D8B9F318 /* VeloxMacDLP.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		DF252518CBE44A287C7E42DF /* VeloxCoreTests */ = {
+			isa = PBXGroup;
+			children = (
+				11D567B51591F3CFA2405621 /* EventLoggerTests.swift */,
+				C4117DBC130D0A3621353698 /* PolicyEngineTests.swift */,
+				AC11271361CC6422FC3471BA /* PolicyManagerTests.swift */,
+				2950E1340C2F09426D65D40D /* SecurityGuardianTests.swift */,
+			);
+			name = VeloxCoreTests;
+			path = Tests/VeloxCoreTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2834EBC53B0719C81C8F06C3 /* VeloxMacDLP */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5C68622515AF1D1092338D52 /* Build configuration list for PBXNativeTarget "VeloxMacDLP" */;
+			buildPhases = (
+				BEB5B74EE94E620AA113B094 /* Sources */,
+				5BE4D83E1980B35328C77A0A /* Frameworks */,
+				5A24E7CDFBF4F76566325D92 /* Embed System Extensions */,
+				FCA75FC35A0882F672EF0F51 /* Embed Host Provisioning Profile */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B8764DDCE4153C42313CBD82 /* PBXTargetDependency */,
+				025624955022D1B9617D9026 /* PBXTargetDependency */,
+			);
+			name = VeloxMacDLP;
+			packageProductDependencies = (
+			);
+			productName = VeloxMacDLP;
+			productReference = 6E8F9FBDB615BC30D8B9F318 /* VeloxMacDLP.app */;
+			productType = "com.apple.product-type.application";
+		};
+		4C8D6520D11426F91F6C0094 /* VeloxCore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 86D57D00AF99BD5DD059B620 /* Build configuration list for PBXNativeTarget "VeloxCore" */;
+			buildPhases = (
+				FB844F45EC40A3FF8C92AD59 /* Sources */,
+				892C32C3666F7918E5AE055D /* Copy Swift Objective-C Interface Header */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VeloxCore;
+			packageProductDependencies = (
+			);
+			productName = VeloxCore;
+			productReference = 82882244835FE33A8714983D /* libVeloxCore.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		5FCAEC0C9FE1FCDE2B2D281D /* VeloxCoreTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B41FC7623B9FED661C9940AD /* Build configuration list for PBXNativeTarget "VeloxCoreTests" */;
+			buildPhases = (
+				493621A1971CD8379CAA5E91 /* Sources */,
+				A9D3B97B59AEB665A1573114 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A3DE507EC8F57DAEF62325CA /* PBXTargetDependency */,
+			);
+			name = VeloxCoreTests;
+			packageProductDependencies = (
+			);
+			productName = VeloxCoreTests;
+			productReference = 53E33542B0AB7A7D171F9828 /* VeloxCoreTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		D5AC70188B70DF6A00259046 /* VeloxExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F4B39414DA0CC94F74759719 /* Build configuration list for PBXNativeTarget "VeloxExtension" */;
+			buildPhases = (
+				7F3FA92FD695A30718A849FF /* Sources */,
+				B2C093E4271B4A9EAE419D41 /* Frameworks */,
+				FA14E4215461922C6788E92B /* Embed Extension Provisioning Profile */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B8660E96803FEBFA944F1ED3 /* PBXTargetDependency */,
+			);
+			name = VeloxExtension;
+			packageProductDependencies = (
+			);
+			productName = VeloxExtension;
+			productReference = 528A941695824503AF88CEF7 /* VeloxExtension.systemextension */;
+			productType = "com.apple.product-type.system-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5776E974B9C650680D4B7C64 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					2834EBC53B0719C81C8F06C3 = {
+						DevelopmentTeam = L7US4BH7Q2;
+						ProvisioningStyle = Manual;
+					};
+					4C8D6520D11426F91F6C0094 = {
+						DevelopmentTeam = L7US4BH7Q2;
+						ProvisioningStyle = Manual;
+					};
+					5FCAEC0C9FE1FCDE2B2D281D = {
+						DevelopmentTeam = L7US4BH7Q2;
+						ProvisioningStyle = Manual;
+					};
+					D5AC70188B70DF6A00259046 = {
+						DevelopmentTeam = L7US4BH7Q2;
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 31D912D62CA67A9152442FA1 /* Build configuration list for PBXProject "VeloxMacDLP" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 344DAFDF3D2B7B8562BEB003;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = D1D3A0DEF21422006454418B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4C8D6520D11426F91F6C0094 /* VeloxCore */,
+				D5AC70188B70DF6A00259046 /* VeloxExtension */,
+				2834EBC53B0719C81C8F06C3 /* VeloxMacDLP */,
+				5FCAEC0C9FE1FCDE2B2D281D /* VeloxCoreTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		892C32C3666F7918E5AE055D /* Copy Swift Objective-C Interface Header */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			name = "Copy Swift Objective-C Interface Header";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/include/$(PRODUCT_MODULE_NAME)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+		FA14E4215461922C6788E92B /* Embed Extension Provisioning Profile */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Extension Provisioning Profile";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ -f \"${PROJECT_DIR}/Sources/VeloxExtension/embedded.provisionprofile\" ]; then\n  cp \"${PROJECT_DIR}/Sources/VeloxExtension/embedded.provisionprofile\" \"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/embedded.provisionprofile\"\nfi\n";
+		};
+		FCA75FC35A0882F672EF0F51 /* Embed Host Provisioning Profile */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Host Provisioning Profile";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ -f \"${PROJECT_DIR}/Sources/VeloxApp/embedded.provisionprofile\" ]; then\n  cp \"${PROJECT_DIR}/Sources/VeloxApp/embedded.provisionprofile\" \"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/embedded.provisionprofile\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		493621A1971CD8379CAA5E91 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B9D72634EE601330AB924B67 /* EventLoggerTests.swift in Sources */,
+				2E9C26D4C691ADFD2C3326D9 /* PolicyEngineTests.swift in Sources */,
+				B56E8E4DE79C2610E7CFF742 /* PolicyManagerTests.swift in Sources */,
+				D5E90D876730FE2D32C483BF /* SecurityGuardianTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7F3FA92FD695A30718A849FF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4C4670E42E506BD3C6B697A2 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BEB5B74EE94E620AA113B094 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2D713E9C6FEDED1FF66546F7 /* AppDelegate.swift in Sources */,
+				7D53196C3966701A36A148D5 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FB844F45EC40A3FF8C92AD59 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				07160851501CFA85F6B9BB9D /* EndpointSecurityService.swift in Sources */,
+				7FF8AB80B6BCFBF3A807EEB0 /* EventLogger.swift in Sources */,
+				561F3DA5E9DDD6E8D5004005 /* FileSecurity.swift in Sources */,
+				AD63BC6D3D24AE03ED369E9F /* PolicyEngine.swift in Sources */,
+				031AF3B7556CDE29AD555D1C /* PolicyManager.swift in Sources */,
+				9E19391BE6C90FD93C33A0DD /* PolicyModel.swift in Sources */,
+				F168C25071F87FA7EE01F690 /* ProcessContext.swift in Sources */,
+				DC0893EE91F2C320157EE04A /* SecurityGuardian.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		025624955022D1B9617D9026 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D5AC70188B70DF6A00259046 /* VeloxExtension */;
+			targetProxy = 4D2B75460370B8B393B60EC1 /* PBXContainerItemProxy */;
+		};
+		A3DE507EC8F57DAEF62325CA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4C8D6520D11426F91F6C0094 /* VeloxCore */;
+			targetProxy = ED732B6B63F62F76894155E4 /* PBXContainerItemProxy */;
+		};
+		B8660E96803FEBFA944F1ED3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4C8D6520D11426F91F6C0094 /* VeloxCore */;
+			targetProxy = 0CFDA1FECE2166341600A8BA /* PBXContainerItemProxy */;
+		};
+		B8764DDCE4153C42313CBD82 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4C8D6520D11426F91F6C0094 /* VeloxCore */;
+			targetProxy = 9A29EA1C8F9224BB28F1322A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		213AE2E37D8BD12CD089D401 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lEndpointSecurity",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = co.velox.core.tests;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		26066B8230FF1B2A764BDD1A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = L7US4BH7Q2;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		63C2B77785B18E2E0837621E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lEndpointSecurity",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = co.velox.core;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		641D1F2CAC90BC007563F35F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = L7US4BH7Q2;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		77AFE06E7D289715BF3A197C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/VeloxApp/VeloxMacDLP.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = L7US4BH7Q2;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Sources/VeloxApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lEndpointSecurity",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp;
+				PRODUCT_NAME = VeloxMacDLP;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		A571176A6DC2F3BC1C363D58 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lEndpointSecurity",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = co.velox.core;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		B2D171BA47CDF6C4F586239B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/VeloxApp/VeloxMacDLP.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = L7US4BH7Q2;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Sources/VeloxApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lEndpointSecurity",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp;
+				PRODUCT_NAME = VeloxMacDLP;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		C9293A8A0DE04A939E44AFA2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lEndpointSecurity",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = co.velox.core.tests;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		E017B88BA85DBBF3043464BB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Sources/VeloxExtension/VeloxMacDLPSE.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = L7US4BH7Q2;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Sources/VeloxExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lEndpointSecurity",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp.endpointsecurity;
+				PRODUCT_NAME = co.velox.macdlp.endpointsecurity;
+				SDKROOT = macosx;
+				WRAPPER_EXTENSION = systemextension;
+			};
+			name = Debug;
+		};
+		F97EC4D81160921875F36685 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Sources/VeloxExtension/VeloxMacDLPSE.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = L7US4BH7Q2;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Sources/VeloxExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lEndpointSecurity",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp.endpointsecurity;
+				PRODUCT_NAME = co.velox.macdlp.endpointsecurity;
+				SDKROOT = macosx;
+				WRAPPER_EXTENSION = systemextension;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		31D912D62CA67A9152442FA1 /* Build configuration list for PBXProject "VeloxMacDLP" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				26066B8230FF1B2A764BDD1A /* Debug */,
+				641D1F2CAC90BC007563F35F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5C68622515AF1D1092338D52 /* Build configuration list for PBXNativeTarget "VeloxMacDLP" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				77AFE06E7D289715BF3A197C /* Debug */,
+				B2D171BA47CDF6C4F586239B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		86D57D00AF99BD5DD059B620 /* Build configuration list for PBXNativeTarget "VeloxCore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				63C2B77785B18E2E0837621E /* Debug */,
+				A571176A6DC2F3BC1C363D58 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B41FC7623B9FED661C9940AD /* Build configuration list for PBXNativeTarget "VeloxCoreTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C9293A8A0DE04A939E44AFA2 /* Debug */,
+				213AE2E37D8BD12CD089D401 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F4B39414DA0CC94F74759719 /* Build configuration list for PBXNativeTarget "VeloxExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E017B88BA85DBBF3043464BB /* Debug */,
+				F97EC4D81160921875F36685 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 5776E974B9C650680D4B7C64 /* Project object */;
+}

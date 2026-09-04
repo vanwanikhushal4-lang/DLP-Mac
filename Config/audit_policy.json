@@ -1,0 +1,12 @@
+{
+  "policyVersion": 2,
+  "applicationControl": {
+    "mode": "audit-only",
+    "blockedApplications": [
+      {
+        "ruleId": "block-calculator",
+        "signingId": "com.apple.calculator"
+      }
+    ]
+  }
+}

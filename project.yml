@@ -1,0 +1,107 @@
+name: VeloxMacDLP
+options:
+  bundleIdPrefix: co.velox
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CODE_SIGN_STYLE: "Manual"
+    CODE_SIGN_IDENTITY: "Apple Development: Vikas Bhoir (JZFXU9DXS8)"
+    DEVELOPMENT_TEAM: "L7US4BH7Q2"
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  VeloxCore:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: Sources/VeloxCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: co.velox.core
+        DEFINES_MODULE: YES
+        SKIP_INSTALL: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
+
+  VeloxExtension:
+    type: system-extension
+    platform: macOS
+    sources:
+      - path: Sources/VeloxExtension/main.swift
+    info:
+      path: Sources/VeloxExtension/Info.plist
+    entitlements:
+      path: Sources/VeloxExtension/VeloxMacDLPSE.entitlements
+      properties:
+        com.apple.developer.endpoint-security.client: true
+    dependencies:
+      - target: VeloxCore
+    postBuildScripts:
+      - name: Embed Extension Provisioning Profile
+        script: |
+          if [ -f "${PROJECT_DIR}/Sources/VeloxExtension/embedded.provisionprofile" ]; then
+            cp "${PROJECT_DIR}/Sources/VeloxExtension/embedded.provisionprofile" "${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/embedded.provisionprofile"
+          fi
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp.endpointsecurity
+        PRODUCT_NAME: co.velox.macdlp.endpointsecurity
+        WRAPPER_EXTENSION: systemextension
+        CODE_SIGN_ENTITLEMENTS: Sources/VeloxExtension/VeloxMacDLPSE.entitlements
+        CODE_SIGN_IDENTITY: "Apple Development: Vikas Bhoir (JZFXU9DXS8)"
+        DEVELOPMENT_TEAM: "L7US4BH7Q2"
+        ENABLE_HARDENED_RUNTIME: YES
+        OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
+
+  VeloxMacDLP:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/VeloxApp/AppDelegate.swift
+      - path: Sources/VeloxApp/main.swift
+    info:
+      path: Sources/VeloxApp/Info.plist
+      properties:
+        LSUIElement: true
+    entitlements:
+      path: Sources/VeloxApp/VeloxMacDLP.entitlements
+      properties:
+        com.apple.developer.system-extension.install: true
+    dependencies:
+      - target: VeloxCore
+      - target: VeloxExtension
+        embed: true
+        destination: custom
+        subpath: Contents/Library/SystemExtensions
+        codeSign: true
+    postBuildScripts:
+      - name: Embed Host Provisioning Profile
+        script: |
+          if [ -f "${PROJECT_DIR}/Sources/VeloxApp/embedded.provisionprofile" ]; then
+            cp "${PROJECT_DIR}/Sources/VeloxApp/embedded.provisionprofile" "${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/embedded.provisionprofile"
+          fi
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp
+        PRODUCT_NAME: VeloxMacDLP
+        CODE_SIGN_ENTITLEMENTS: Sources/VeloxApp/VeloxMacDLP.entitlements
+        CODE_SIGN_IDENTITY: "Apple Development: Vikas Bhoir (JZFXU9DXS8)"
+        DEVELOPMENT_TEAM: "L7US4BH7Q2"
+        ENABLE_HARDENED_RUNTIME: YES
+        OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
+
+  VeloxCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/VeloxCoreTests
+    dependencies:
+      - target: VeloxCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: co.velox.core.tests
+        GENERATE_INFOPLIST_FILE: YES
+        ENABLE_HARDENED_RUNTIME: NO
+        OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
