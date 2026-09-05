@@ -99,6 +99,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
         ) { error in
             if let error {
                 logger.error("Unable to open Safari extension settings: \(error.localizedDescription, privacy: .public)")
+                Task { @MainActor in
+                    if let safariURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Safari") {
+                        let config = NSWorkspace.OpenConfiguration()
+                        config.activates = true
+                        NSWorkspace.shared.openApplication(at: safariURL, configuration: config, completionHandler: nil)
+                    }
+                }
             }
         }
     }

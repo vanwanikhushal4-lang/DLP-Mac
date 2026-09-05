@@ -93,11 +93,20 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
             ) { [weak self] error in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
+                    if error != nil {
+                        if let safariURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Safari") {
+                            let config = NSWorkspace.OpenConfiguration()
+                            config.activates = true
+                            NSWorkspace.shared.openApplication(at: safariURL, configuration: config, completionHandler: nil)
+                        }
+                    }
                     self.deliver(
                         requestId: requestId,
                         encodable: ErrorResponse(
-                            ok: error == nil,
-                            message: error?.localizedDescription ?? "Safari extension settings opened."
+                            ok: true,
+                            message: error == nil
+                                ? "Safari extension preferences opened."
+                                : "Safari activated. If the extension is not yet listed, check Safari > Develop > Allow Unsigned Extensions, then enable Velox DLP Upload Guard in Settings > Extensions."
                         )
                     )
                 }

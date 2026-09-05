@@ -208,10 +208,10 @@ function App() {
 
   async function openSafariSettings() {
     try {
-      await nativeCall("openSafariExtensionSettings");
-      setNotice("Enable Velox DLP Upload Guard in Safari, then allow it on all websites.");
+      const resp = await nativeCall("openSafariExtensionSettings");
+      setNotice(resp?.message || "In Safari: Ensure Develop > 'Allow Unsigned Extensions' is enabled, then turn on Velox DLP Upload Guard in Settings > Extensions.");
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : "Unable to open Safari settings.");
     }
   }
 
