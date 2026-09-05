@@ -24,6 +24,7 @@
 		561F3DA5E9DDD6E8D5004005 /* FileSecurity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FEE5595D3E58E64956D34A /* FileSecurity.swift */; };
 		66E06A7C3CAC9F61F85B1DB5 /* dist in Resources */ = {isa = PBXBuildFile; fileRef = DDF89EA6F481543896EFCCED /* dist */; };
 		6E593BB721975922B813191E /* VeloxExtension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 528A941695824503AF88CEF7 /* VeloxExtension.systemextension */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		6EDF6749A6A74B4E706489B7 /* NearbyTransferDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9F515F38AE8E3EF183E57EF /* NearbyTransferDecision.swift */; };
 		71AE3E6924A547BD83E09700 /* VeloxNotificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAD3F800C2079BDE356E5401 /* VeloxNotificationTests.swift */; };
 		71B158FCAC601A18AC73FE4B /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE0733F6AE5BF22F317BECD1 /* SafariWebExtensionHandler.swift */; };
 		7D53196C3966701A36A148D5 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF46A124E99C346B960B335 /* main.swift */; };
@@ -143,6 +144,7 @@
 		C08CD7BEF1DC8E25506C7A63 /* ExtensionControlClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionControlClient.swift; sourceTree = "<group>"; };
 		C15D11AED23FA50D77313DF3 /* ConsoleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleController.swift; sourceTree = "<group>"; };
 		C4117DBC130D0A3621353698 /* PolicyEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyEngineTests.swift; sourceTree = "<group>"; };
+		C9F515F38AE8E3EF183E57EF /* NearbyTransferDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyTransferDecision.swift; sourceTree = "<group>"; };
 		CB52C31363C7545F4CFBCC13 /* VeloxNotificationFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VeloxNotificationFormatter.swift; sourceTree = "<group>"; };
 		CE0733F6AE5BF22F317BECD1 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
 		D188E5ECFB2A5166368BE0C3 /* ControlService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlService.swift; sourceTree = "<group>"; };
@@ -185,6 +187,7 @@
 			isa = PBXGroup;
 			children = (
 				82BE1F9CB74E8BC66BF68CF0 /* ClipboardDecision.swift */,
+				C9F515F38AE8E3EF183E57EF /* NearbyTransferDecision.swift */,
 				5237E6CF7500B33B4AB5F140 /* PolicyEngine.swift */,
 				0F0B42A9DD8BC115FDE2AA6A /* PolicyManager.swift */,
 				ECE0F4E4B48C74AF8C496E2E /* PolicyModel.swift */,
@@ -578,6 +581,7 @@
 				07160851501CFA85F6B9BB9D /* EndpointSecurityService.swift in Sources */,
 				7FF8AB80B6BCFBF3A807EEB0 /* EventLogger.swift in Sources */,
 				561F3DA5E9DDD6E8D5004005 /* FileSecurity.swift in Sources */,
+				6EDF6749A6A74B4E706489B7 /* NearbyTransferDecision.swift in Sources */,
 				AD63BC6D3D24AE03ED369E9F /* PolicyEngine.swift in Sources */,
 				031AF3B7556CDE29AD555D1C /* PolicyManager.swift in Sources */,
 				9E19391BE6C90FD93C33A0DD /* PolicyModel.swift in Sources */,

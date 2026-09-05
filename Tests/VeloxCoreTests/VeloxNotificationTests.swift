@@ -42,6 +42,22 @@ final class VeloxNotificationTests: XCTestCase {
         XCTAssertEqual(formatted.body, "Pasting protected file 'passwords.txt (and 1 other files)' into Firefox was blocked.")
     }
 
+    func testClipboardControlNotificationFormatting() {
+        let formatted = VeloxNotificationFormatter.format(
+            module: "clipboard-control",
+            action: "copy",
+            target: "formatted-text, text · 1 item",
+            detail: "Notes"
+        )
+
+        XCTAssertEqual(formatted.title, "Blocked by Velox DLP")
+        XCTAssertEqual(formatted.subtitle, "Clipboard Copy Blocked")
+        XCTAssertEqual(
+            formatted.body,
+            "Copying formatted-text, text · 1 item from Notes was blocked by security policy."
+        )
+    }
+
     func testUSBStorageNotificationFormatting() {
         let formatted = VeloxNotificationFormatter.format(
             module: "usb-storage-control",
@@ -53,6 +69,43 @@ final class VeloxNotificationTests: XCTestCase {
         XCTAssertEqual(formatted.title, "Blocked by Velox DLP")
         XCTAssertEqual(formatted.subtitle, "USB Storage Blocked")
         XCTAssertEqual(formatted.body, "External storage 'BACKUP_DRIVE' was blocked from mounting.")
+    }
+
+    func testNearbyTransferNotificationFormatting() {
+        let airDrop = VeloxNotificationFormatter.format(
+            module: "nearby-transfer-control",
+            action: "airdrop-file-open",
+            target: "/Users/alice/Documents/strategy.pdf",
+            detail: "com.apple.finder.Open-AirDrop"
+        )
+        XCTAssertEqual(airDrop.title, "Blocked by Velox DLP")
+        XCTAssertEqual(airDrop.subtitle, "Nearby Transfer Blocked")
+        XCTAssertEqual(
+            airDrop.body,
+            "Sending 'strategy.pdf' through AirDrop was blocked by security policy."
+        )
+
+        let appleSharing = VeloxNotificationFormatter.format(
+            module: "nearby-transfer-control",
+            action: "apple-sharing-file-open",
+            target: "/Users/alice/Desktop/customer.csv",
+            detail: "com.apple.sharingd"
+        )
+        XCTAssertEqual(
+            appleSharing.body,
+            "Sending 'customer.csv' through Apple nearby sharing was blocked by security policy."
+        )
+
+        let bluetooth = VeloxNotificationFormatter.format(
+            module: "nearby-transfer-control",
+            action: "bluetooth-file-open",
+            target: "/Users/alice/Downloads/source.zip",
+            detail: "com.apple.BluetoothFileExchange"
+        )
+        XCTAssertEqual(
+            bluetooth.body,
+            "Sending 'source.zip' through Bluetooth file transfer was blocked by security policy."
+        )
     }
 
     func testNotificationDebouncerSuppressesDuplicateEvents() {

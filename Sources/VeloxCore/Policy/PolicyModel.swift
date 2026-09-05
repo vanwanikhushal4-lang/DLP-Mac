@@ -208,22 +208,135 @@ public struct USBStorageControlConfig: Codable, Sendable, Equatable {
     }
 }
 
+/// Controls outbound file reads performed by macOS nearby-sharing services.
+/// Incoming transfers use write access and are deliberately left untouched.
+public struct NearbyTransferControlConfig: Codable, Sendable, Equatable {
+    public let mode: PolicyMode
+    public let blockAirDrop: Bool
+    public let blockBluetoothFileTransfer: Bool
+    public let protectedDirectoryNames: [String]
+
+    public init(
+        mode: PolicyMode = .disabled,
+        blockAirDrop: Bool = true,
+        blockBluetoothFileTransfer: Bool = true,
+        protectedDirectoryNames: [String] = WebUploadControlConfig.defaultProtectedDirectoryNames
+    ) {
+        self.mode = mode
+        self.blockAirDrop = blockAirDrop
+        self.blockBluetoothFileTransfer = blockBluetoothFileTransfer
+        self.protectedDirectoryNames = protectedDirectoryNames
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decode(PolicyMode.self, forKey: .mode)
+        self.blockAirDrop = try container.decodeIfPresent(Bool.self, forKey: .blockAirDrop) ?? true
+        self.blockBluetoothFileTransfer = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .blockBluetoothFileTransfer
+        ) ?? true
+        self.protectedDirectoryNames = try container.decodeIfPresent(
+            [String].self,
+            forKey: .protectedDirectoryNames
+        ) ?? WebUploadControlConfig.defaultProtectedDirectoryNames
+    }
+
+    public func validate() throws {
+        guard !protectedDirectoryNames.isEmpty else {
+            throw PolicyValidationError.invalidCriterion(
+                "nearbyTransferControl.protectedDirectoryNames cannot be empty"
+            )
+        }
+
+        var seen = Set<String>()
+        for directoryName in protectedDirectoryNames {
+            let trimmed = directoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  trimmed != ".",
+                  trimmed != "..",
+                  !trimmed.contains("/") else {
+                throw PolicyValidationError.invalidCriterion(
+                    "Nearby-transfer protected directory names must be single safe path components"
+                )
+            }
+            guard seen.insert(trimmed.lowercased()).inserted else {
+                throw PolicyValidationError.invalidCriterion(
+                    "Duplicate nearby-transfer protected directory name '\(trimmed)'"
+                )
+            }
+        }
+    }
+}
+
+/// User-session clipboard policy enforced by the Velox host agent.
+///
+/// macOS does not expose clipboard authorization events through Endpoint Security,
+/// so the host observes NSPasteboard changes and removes newly copied data when
+/// this policy requires it. Rules use the same signed-process identity model as
+/// application control instead of trusting a display name.
+public enum ClipboardControlMode: String, Codable, Sendable, Equatable {
+    case disabled
+    case blockAll = "block-all"
+    case blockSelectedApplications = "block-selected-apps"
+}
+
+public struct ClipboardControlConfig: Codable, Sendable, Equatable {
+    public let mode: ClipboardControlMode
+    public let blockedApplications: [ApplicationRule]
+
+    public init(
+        mode: ClipboardControlMode = .disabled,
+        blockedApplications: [ApplicationRule] = []
+    ) {
+        self.mode = mode
+        self.blockedApplications = blockedApplications
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decode(ClipboardControlMode.self, forKey: .mode)
+        self.blockedApplications = try container.decodeIfPresent(
+            [ApplicationRule].self,
+            forKey: .blockedApplications
+        ) ?? []
+    }
+
+    public func validate() throws {
+        var seenRuleIds = Set<String>()
+        for rule in blockedApplications {
+            try rule.validate(isAllowRule: false)
+            guard seenRuleIds.insert(rule.ruleId).inserted else {
+                throw PolicyValidationError.duplicateRuleId(
+                    "Duplicate clipboard ruleId '\(rule.ruleId)' detected"
+                )
+            }
+        }
+    }
+}
+
 public struct VeloxPolicy: Codable, Sendable, Equatable {
     public let policyVersion: Int
     public let applicationControl: ApplicationControlConfig
     public let webUploadControl: WebUploadControlConfig
     public let usbStorageControl: USBStorageControlConfig
+    public let nearbyTransferControl: NearbyTransferControlConfig
+    public let clipboardControl: ClipboardControlConfig
 
     public init(
         policyVersion: Int,
         applicationControl: ApplicationControlConfig,
         webUploadControl: WebUploadControlConfig = WebUploadControlConfig(),
-        usbStorageControl: USBStorageControlConfig = USBStorageControlConfig()
+        usbStorageControl: USBStorageControlConfig = USBStorageControlConfig(),
+        nearbyTransferControl: NearbyTransferControlConfig = NearbyTransferControlConfig(),
+        clipboardControl: ClipboardControlConfig = ClipboardControlConfig()
     ) {
         self.policyVersion = policyVersion
         self.applicationControl = applicationControl
         self.webUploadControl = webUploadControl
         self.usbStorageControl = usbStorageControl
+        self.nearbyTransferControl = nearbyTransferControl
+        self.clipboardControl = clipboardControl
     }
 
     public init(from decoder: Decoder) throws {
@@ -238,6 +351,14 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             USBStorageControlConfig.self,
             forKey: .usbStorageControl
         ) ?? USBStorageControlConfig()
+        self.nearbyTransferControl = try container.decodeIfPresent(
+            NearbyTransferControlConfig.self,
+            forKey: .nearbyTransferControl
+        ) ?? NearbyTransferControlConfig()
+        self.clipboardControl = try container.decodeIfPresent(
+            ClipboardControlConfig.self,
+            forKey: .clipboardControl
+        ) ?? ClipboardControlConfig()
     }
 
     /// Strictly parses and validates JSON data, rejecting any unknown properties or malformed fields.
@@ -251,7 +372,9 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             "policyVersion",
             "applicationControl",
             "webUploadControl",
-            "usbStorageControl"
+            "usbStorageControl",
+            "nearbyTransferControl",
+            "clipboardControl"
         ]
         for key in jsonObject.keys {
             if !validTopKeys.contains(key) {
@@ -319,6 +442,45 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             }
         }
 
+        if let nearbyTransferObj = jsonObject["nearbyTransferControl"] as? [String: Any] {
+            let validNearbyKeys: Set<String> = [
+                "mode",
+                "blockAirDrop",
+                "blockBluetoothFileTransfer",
+                "protectedDirectoryNames"
+            ]
+            for key in nearbyTransferObj.keys {
+                if !validNearbyKeys.contains(key) {
+                    throw PolicyValidationError.unknownProperty(
+                        "Unknown property '\(key)' in nearbyTransferControl"
+                    )
+                }
+            }
+        }
+
+        if let clipboardObj = jsonObject["clipboardControl"] as? [String: Any] {
+            let validClipboardKeys: Set<String> = ["mode", "blockedApplications"]
+            for key in clipboardObj.keys {
+                if !validClipboardKeys.contains(key) {
+                    throw PolicyValidationError.unknownProperty(
+                        "Unknown property '\(key)' in clipboardControl"
+                    )
+                }
+            }
+
+            if let blockedList = clipboardObj["blockedApplications"] as? [[String: Any]] {
+                for ruleDict in blockedList {
+                    for key in ruleDict.keys {
+                        if !validRuleKeys.contains(key) {
+                            throw PolicyValidationError.unknownProperty(
+                                "Unknown property '\(key)' in clipboard blocked rule"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         let policy = try JSONDecoder().decode(VeloxPolicy.self, from: data)
         try policy.validate()
         return policy
@@ -331,6 +493,8 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
 
         try webUploadControl.validate()
         try usbStorageControl.validate()
+        try nearbyTransferControl.validate()
+        try clipboardControl.validate()
 
         var seenRuleIds = Set<String>()
         for rule in applicationControl.allowedApplications {

@@ -14,6 +14,14 @@ private struct ControlSnapshot: Codable {
     let webUploadMode: String
     let webUploadProtectedDirectories: [String]
     let usbStorageMode: String
+    let nearbyTransferMode: String
+    let nearbyTransferProtectedDirectories: [String]
+    let nearbyTransferBlocksAirDrop: Bool
+    let nearbyTransferBlocksBluetooth: Bool
+    let clipboardMode: String
+    let clipboardBlockedRuleCount: Int
+    let clipboardBlockedSigningIds: [String]
+    let clipboardBlockedExecutablePaths: [String]
     let totalAuthHandled: UInt64
     let totalDeadlineMisses: UInt64
     let message: String?
@@ -35,6 +43,19 @@ private struct BrowserUploadAttempt: Decodable {
     let fileNames: [String]
     let interaction: String
     let blocked: Bool
+}
+
+private struct ClipboardEventAttempt: Decodable {
+    let sourceApplication: String
+    let signingId: String?
+    let teamId: String?
+    let executablePath: String
+    let pid: Int32
+    let codesigningFlags: UInt32
+    let isPlatformBinary: Bool
+    let contentTypes: [String]
+    let itemCount: Int
+    let cleared: Bool
 }
 
 /// Rejects every caller except the valid, Team-ID-bound Velox host application.
@@ -167,7 +188,9 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
         let module = event.module
         let action = event.action
         let target = event.resourcePath ?? event.executablePath
-        let detail = event.signingId ?? event.teamId ?? ""
+        let detail = event.module == "clipboard-control"
+            ? (event.pageURL ?? event.signingId ?? "Application")
+            : (event.signingId ?? event.teamId ?? "")
         let timestamp = Date().timeIntervalSince1970
 
         for client in clients {
@@ -205,7 +228,9 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
                 allowedApplications: current.applicationControl.allowedApplications
             ),
             webUploadControl: current.webUploadControl,
-            usbStorageControl: current.usbStorageControl
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl
         )
         apply(updated, reply: reply)
     }
@@ -227,7 +252,9 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
                 mode: requestedMode,
                 protectedDirectoryNames: current.webUploadControl.protectedDirectoryNames
             ),
-            usbStorageControl: current.usbStorageControl
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl
         )
         apply(updated, reply: reply)
     }
@@ -249,9 +276,186 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
             usbStorageControl: USBStorageControlConfig(
                 mode: requestedMode,
                 blockExternalStorage: current.usbStorageControl.blockExternalStorage
+            ),
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setNearbyTransferMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedMode = PolicyMode(rawValue: mode) else {
+            reply(errorJSON("Unsupported nearby-transfer mode '\(mode)'."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: NearbyTransferControlConfig(
+                mode: requestedMode,
+                blockAirDrop: current.nearbyTransferControl.blockAirDrop,
+                blockBluetoothFileTransfer: current.nearbyTransferControl.blockBluetoothFileTransfer,
+                protectedDirectoryNames: current.nearbyTransferControl.protectedDirectoryNames
+            ),
+            clipboardControl: current.clipboardControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setClipboardMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedMode = ClipboardControlMode(rawValue: mode) else {
+            reply(errorJSON("Unsupported clipboard-control mode '\(mode)'."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: ClipboardControlConfig(
+                mode: requestedMode,
+                blockedApplications: current.clipboardControl.blockedApplications
             )
         )
         apply(updated, reply: reply)
+    }
+
+    func setClipboardApplicationBlocked(
+        signingId: String,
+        executablePath: String,
+        displayName: String,
+        blocked: Bool,
+        withReply reply: @escaping (String) -> Void
+    ) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        let normalizedSigningId = signingId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPath = executablePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedSigningId.isEmpty || normalizedPath.hasPrefix("/") else {
+            reply(errorJSON("A valid signing identity or absolute executable path is required."))
+            return
+        }
+
+        if SecurityGuardian.selfSigningIdentifiers.contains(normalizedSigningId) {
+            reply(errorJSON("\(displayName) is protected and cannot be clipboard-blocked."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        var blockedRules = current.clipboardControl.blockedApplications.filter { rule in
+            let sameSigningId = !normalizedSigningId.isEmpty &&
+                rule.signingId?.caseInsensitiveCompare(normalizedSigningId) == .orderedSame
+            let samePath = !normalizedPath.isEmpty && rule.executablePath == normalizedPath
+            return !sameSigningId && !samePath
+        }
+
+        if blocked {
+            blockedRules.append(
+                ApplicationRule(
+                    ruleId: "clipboard-console-\(UUID().uuidString.lowercased())",
+                    signingId: normalizedSigningId.isEmpty ? nil : normalizedSigningId,
+                    executablePath: normalizedSigningId.isEmpty ? normalizedPath : nil
+                )
+            )
+        }
+
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: ClipboardControlConfig(
+                mode: current.clipboardControl.mode,
+                blockedApplications: blockedRules
+            )
+        )
+        apply(updated, reply: reply)
+    }
+
+    func recordClipboardEvent(_ payloadJSON: String, withReply reply: @escaping (String) -> Void) {
+        guard let data = payloadJSON.data(using: .utf8), data.count <= 32_768,
+              let attempt = try? JSONDecoder().decode(ClipboardEventAttempt.self, from: data) else {
+            reply(errorJSON("Invalid clipboard event."))
+            return
+        }
+
+        let sourceApplication = attempt.sourceApplication
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let executablePath = attempt.executablePath
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sourceApplication.isEmpty,
+              sourceApplication.count <= 256,
+              executablePath.hasPrefix("/"),
+              executablePath.count <= 4_096,
+              (0...100).contains(attempt.itemCount) else {
+            reply(errorJSON("Clipboard event contains invalid source metadata."))
+            return
+        }
+
+        let sanitizedTypes = attempt.contentTypes.prefix(12).compactMap { raw -> String? in
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty, value.count <= 64 else { return nil }
+            return value
+        }
+        guard !sanitizedTypes.isEmpty else {
+            reply(errorJSON("Clipboard event contains no valid data types."))
+            return
+        }
+
+        let process = ProcessContext(
+            pid: attempt.pid,
+            parentPid: 0,
+            uid: 0,
+            signingId: attempt.signingId,
+            teamId: attempt.teamId,
+            isPlatformBinary: attempt.isPlatformBinary,
+            cdhash: nil,
+            executablePath: executablePath,
+            codesigningFlags: attempt.codesigningFlags
+        )
+        let evaluated = policyManager.policyEngine.evaluateClipboardCopy(source: process)
+        let decision = evaluated.shouldClearPasteboard
+            ? (attempt.cleared ? "blocked" : "enforcement-mismatch")
+            : "allowed"
+        let summary = "\(sanitizedTypes.joined(separator: ", ")) · \(attempt.itemCount) item\(attempt.itemCount == 1 ? "" : "s")"
+        let event = ExecutionEvent(
+            module: "clipboard-control",
+            action: "copy",
+            decision: decision,
+            ruleId: evaluated.matchingRuleId,
+            policyVersion: evaluated.policyVersion,
+            executablePath: executablePath,
+            signingId: attempt.signingId,
+            teamId: attempt.teamId,
+            pid: attempt.pid,
+            parentPid: 0,
+            uid: 0,
+            decisionLatencyMicros: 1,
+            authResponseResult: attempt.cleared ? "pasteboard-cleared" : "pasteboard-observed",
+            resourcePath: summary,
+            pageURL: sourceApplication,
+            interaction: "copy"
+        )
+        eventLogger.logEventSync(event)
+        if decision == "blocked" {
+            broadcastBlockedEvent(event)
+        }
+        reply(#"{"ok":true}"#)
     }
 
     func recordBrowserUploadAttempt(_ payloadJSON: String, withReply reply: @escaping (String) -> Void) {
@@ -356,7 +560,9 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
                 allowedApplications: current.applicationControl.allowedApplications
             ),
             webUploadControl: current.webUploadControl,
-            usbStorageControl: current.usbStorageControl
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl
         )
         apply(updated, reply: reply)
     }
@@ -404,6 +610,17 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
                 webUploadMode: policy.webUploadControl.mode.rawValue,
                 webUploadProtectedDirectories: policy.webUploadControl.protectedDirectoryNames,
                 usbStorageMode: policy.usbStorageControl.mode.rawValue,
+                nearbyTransferMode: policy.nearbyTransferControl.mode.rawValue,
+                nearbyTransferProtectedDirectories: policy.nearbyTransferControl.protectedDirectoryNames,
+                nearbyTransferBlocksAirDrop: policy.nearbyTransferControl.blockAirDrop,
+                nearbyTransferBlocksBluetooth: policy.nearbyTransferControl.blockBluetoothFileTransfer,
+                clipboardMode: policy.clipboardControl.mode.rawValue,
+                clipboardBlockedRuleCount: policy.clipboardControl.blockedApplications.count,
+                clipboardBlockedSigningIds: policy.clipboardControl.blockedApplications
+                    .compactMap(\.signingId)
+                    .map { $0.lowercased() },
+                clipboardBlockedExecutablePaths: policy.clipboardControl.blockedApplications
+                    .compactMap(\.executablePath),
                 totalAuthHandled: health?.totalAuthHandled ?? 0,
                 totalDeadlineMisses: health?.totalDeadlineMisses ?? 0,
                 message: nil

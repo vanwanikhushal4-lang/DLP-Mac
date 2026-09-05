@@ -16,5 +16,19 @@
       "Documents",
       "Downloads"
     ]
+  },
+  "nearbyTransferControl": {
+    "mode": "audit-only",
+    "blockAirDrop": true,
+    "blockBluetoothFileTransfer": true,
+    "protectedDirectoryNames": [
+      "Desktop",
+      "Documents",
+      "Downloads"
+    ]
+  },
+  "clipboardControl": {
+    "mode": "disabled",
+    "blockedApplications": []
   }
 }

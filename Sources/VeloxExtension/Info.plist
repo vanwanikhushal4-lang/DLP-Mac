@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>SYSX</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.3.0</string>
+	<string>1.5.0</string>
 	<key>CFBundleVersion</key>
-	<string>8</string>
+	<string>10</string>
 	<key>NSEndpointSecurityMachServiceName</key>
 	<string>L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc</string>
 	<key>NSSystemExtensionUsageDescription</key>

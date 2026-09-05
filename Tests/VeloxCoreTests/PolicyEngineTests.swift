@@ -664,6 +664,324 @@ final class PolicyEngineTests: XCTestCase {
         XCTAssertEqual(policy.usbStorageControl.mode, .enforce)
         XCTAssertTrue(policy.usbStorageControl.blockExternalStorage)
     }
+
+    func testNearbyTransferBlocksProtectedFileReadBySharingd() {
+        let policy = VeloxPolicy(
+            policyVersion: 30,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            nearbyTransferControl: NearbyTransferControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let sharingd = ProcessContext(
+            pid: 500, parentPid: 1, uid: 501,
+            signingId: "com.apple.sharingd", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/usr/libexec/sharingd"
+        )
+
+        let decision = engine.evaluateNearbyTransferOpen(
+            process: sharingd,
+            filePath: "/Users/alice/Documents/confidential.pdf",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertFalse(decision.shouldAllowOpen)
+        XCTAssertTrue(decision.isTransferCandidate)
+        XCTAssertEqual(decision.decisionString, "blocked")
+        XCTAssertEqual(decision.matchingRuleId, "nearby-airdrop-file-read")
+        XCTAssertEqual(decision.channel, "apple-sharing")
+    }
+
+    func testNearbyTransferBlocksProtectedFileReadByBluetoothFileExchange() {
+        let policy = VeloxPolicy(
+            policyVersion: 31,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            nearbyTransferControl: NearbyTransferControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let bluetoothFileExchange = ProcessContext(
+            pid: 501, parentPid: 1, uid: 501,
+            signingId: "com.apple.BluetoothFileExchange", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Applications/Utilities/Bluetooth File Exchange.app/Contents/MacOS/Bluetooth File Exchange"
+        )
+
+        let decision = engine.evaluateNearbyTransferOpen(
+            process: bluetoothFileExchange,
+            filePath: "/Users/alice/Desktop/roadmap.xlsx",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertFalse(decision.shouldAllowOpen)
+        XCTAssertTrue(decision.isTransferCandidate)
+        XCTAssertEqual(decision.decisionString, "blocked")
+        XCTAssertEqual(decision.matchingRuleId, "nearby-bluetooth-file-read")
+        XCTAssertEqual(decision.channel, "bluetooth")
+    }
+
+    func testNearbyTransferAllowsIncomingWriteAccess() {
+        let policy = VeloxPolicy(
+            policyVersion: 32,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            nearbyTransferControl: NearbyTransferControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let obexAgent = ProcessContext(
+            pid: 502, parentPid: 1, uid: 501,
+            signingId: "com.apple.OBEXAgent", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Library/CoreServices/OBEXAgent.app/Contents/MacOS/OBEXAgent"
+        )
+
+        let decision = engine.evaluateNearbyTransferOpen(
+            process: obexAgent,
+            filePath: "/Users/alice/Downloads/incoming.pdf",
+            requestedFlags: UInt32(FWRITE),
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(decision.shouldAllowOpen)
+        XCTAssertFalse(decision.isTransferCandidate)
+        XCTAssertEqual(decision.decisionString, "allowed")
+    }
+
+    func testNearbyTransferDoesNotBlockOrdinaryApplicationRead() {
+        let policy = VeloxPolicy(
+            policyVersion: 33,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            nearbyTransferControl: NearbyTransferControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let preview = ProcessContext(
+            pid: 503, parentPid: 1, uid: 501,
+            signingId: "com.apple.Preview", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Applications/Preview.app/Contents/MacOS/Preview"
+        )
+
+        let decision = engine.evaluateNearbyTransferOpen(
+            process: preview,
+            filePath: "/Users/alice/Documents/confidential.pdf",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(decision.shouldAllowOpen)
+        XCTAssertFalse(decision.isTransferCandidate)
+        XCTAssertNil(decision.channel)
+    }
+
+    func testNearbyTransferAuditOnlyRecordsWithoutBlocking() {
+        let policy = VeloxPolicy(
+            policyVersion: 34,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            nearbyTransferControl: NearbyTransferControlConfig(mode: .auditOnly)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let airDrop = ProcessContext(
+            pid: 504, parentPid: 1, uid: 501,
+            signingId: "com.apple.finder.Open-AirDrop", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Library/CoreServices/Finder.app/Contents/Applications/AirDrop.app/Contents/MacOS/AirDrop"
+        )
+
+        let decision = engine.evaluateNearbyTransferOpen(
+            process: airDrop,
+            filePath: "/Users/alice/Pictures/diagram.png",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(decision.shouldAllowOpen)
+        XCTAssertTrue(decision.isTransferCandidate)
+        XCTAssertEqual(decision.decisionString, "would-block")
+        XCTAssertEqual(decision.channel, "airdrop")
+    }
+
+    func testNearbyTransferDisabledModeAllowsRead() {
+        let policy = VeloxPolicy(
+            policyVersion: 35,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            nearbyTransferControl: NearbyTransferControlConfig(mode: .disabled)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let sharingd = ProcessContext(
+            pid: 505, parentPid: 1, uid: 501,
+            signingId: "com.apple.sharingd", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/usr/libexec/sharingd"
+        )
+
+        let decision = engine.evaluateNearbyTransferOpen(
+            process: sharingd,
+            filePath: "/Users/alice/Documents/confidential.pdf",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(decision.shouldAllowOpen)
+        XCTAssertFalse(decision.isTransferCandidate)
+        XCTAssertEqual(decision.decisionString, "allowed")
+    }
+
+    func testNearbyTransferHonorsPerChannelSwitch() {
+        let policy = VeloxPolicy(
+            policyVersion: 36,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            nearbyTransferControl: NearbyTransferControlConfig(
+                mode: .enforce,
+                blockAirDrop: false,
+                blockBluetoothFileTransfer: true
+            )
+        )
+        let engine = PolicyEngine(policy: policy)
+        let sharingd = ProcessContext(
+            pid: 506, parentPid: 1, uid: 501,
+            signingId: "com.apple.sharingd", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/usr/libexec/sharingd"
+        )
+
+        let decision = engine.evaluateNearbyTransferOpen(
+            process: sharingd,
+            filePath: "/Users/alice/Documents/confidential.pdf",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(decision.shouldAllowOpen)
+        XCTAssertFalse(decision.isTransferCandidate)
+        XCTAssertEqual(decision.channel, "apple-sharing")
+    }
+
+    func testNearbyTransferPolicyStrictDecodingAndUnknownPropertyRejection() throws {
+        let json = """
+        {
+            "policyVersion": 37,
+            "applicationControl": {
+                "mode": "enforce",
+                "blockedApplications": [],
+                "allowedApplications": []
+            },
+            "nearbyTransferControl": {
+                "mode": "audit-only",
+                "blockAirDrop": true,
+                "blockBluetoothFileTransfer": false,
+                "protectedDirectoryNames": ["Desktop", "Documents"]
+            }
+        }
+        """
+        let policy = try VeloxPolicy.decodeStrict(from: Data(json.utf8))
+        XCTAssertEqual(policy.nearbyTransferControl.mode, .auditOnly)
+        XCTAssertTrue(policy.nearbyTransferControl.blockAirDrop)
+        XCTAssertFalse(policy.nearbyTransferControl.blockBluetoothFileTransfer)
+        XCTAssertEqual(policy.nearbyTransferControl.protectedDirectoryNames, ["Desktop", "Documents"])
+
+        let invalidJSON = json.replacingOccurrences(
+            of: "\"protectedDirectoryNames\": [\"Desktop\", \"Documents\"]",
+            with: "\"protectedDirectoryNames\": [\"Desktop\"], \"unexpected\": true"
+        )
+        XCTAssertThrowsError(try VeloxPolicy.decodeStrict(from: Data(invalidJSON.utf8)))
+    }
+
+    func testClipboardBlockAllClearsEverySource() {
+        let policy = VeloxPolicy(
+            policyVersion: 40,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            clipboardControl: ClipboardControlConfig(mode: .blockAll)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let notes = ProcessContext(
+            pid: 700, parentPid: 1, uid: 501,
+            signingId: "com.apple.Notes", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Applications/Notes.app/Contents/MacOS/Notes"
+        )
+
+        let decision = engine.evaluateClipboardCopy(source: notes)
+
+        XCTAssertTrue(decision.shouldClearPasteboard)
+        XCTAssertEqual(decision.decisionString, "blocked")
+        XCTAssertEqual(decision.matchingRuleId, "clipboard-block-all")
+        XCTAssertEqual(decision.policyVersion, 40)
+    }
+
+    func testClipboardSelectedApplicationsMatchesSignedSourceOnly() {
+        let rule = ApplicationRule(
+            ruleId: "clipboard-block-notes",
+            signingId: "com.apple.Notes"
+        )
+        let policy = VeloxPolicy(
+            policyVersion: 41,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            clipboardControl: ClipboardControlConfig(
+                mode: .blockSelectedApplications,
+                blockedApplications: [rule]
+            )
+        )
+        let engine = PolicyEngine(policy: policy)
+        let notes = ProcessContext(
+            pid: 701, parentPid: 1, uid: 501,
+            signingId: "com.apple.Notes", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Applications/Notes.app/Contents/MacOS/Notes"
+        )
+        let textEdit = ProcessContext(
+            pid: 702, parentPid: 1, uid: 501,
+            signingId: "com.apple.TextEdit", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Applications/TextEdit.app/Contents/MacOS/TextEdit"
+        )
+
+        let blocked = engine.evaluateClipboardCopy(source: notes)
+        let allowed = engine.evaluateClipboardCopy(source: textEdit)
+
+        XCTAssertTrue(blocked.shouldClearPasteboard)
+        XCTAssertEqual(blocked.matchingRuleId, "clipboard-block-notes")
+        XCTAssertFalse(allowed.shouldClearPasteboard)
+        XCTAssertEqual(allowed.decisionString, "allowed")
+    }
+
+    func testClipboardDisabledAllowsCopy() {
+        let policy = VeloxPolicy(
+            policyVersion: 42,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            clipboardControl: ClipboardControlConfig(mode: .disabled)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let source = ProcessContext(
+            pid: 703, parentPid: 1, uid: 501,
+            signingId: "com.example.app", teamId: "EXAMPLETEAM",
+            isPlatformBinary: false, cdhash: nil,
+            executablePath: "/Applications/Example.app/Contents/MacOS/Example"
+        )
+
+        XCTAssertFalse(engine.evaluateClipboardCopy(source: source).shouldClearPasteboard)
+    }
+
+    func testClipboardPolicyStrictDecodingAndUnknownPropertyRejection() throws {
+        let json = """
+        {
+            "policyVersion": 43,
+            "applicationControl": { "mode": "enforce" },
+            "clipboardControl": {
+                "mode": "block-selected-apps",
+                "blockedApplications": [
+                    { "ruleId": "clipboard-notes", "signingId": "com.apple.Notes" }
+                ]
+            }
+        }
+        """
+        let policy = try VeloxPolicy.decodeStrict(from: Data(json.utf8))
+        XCTAssertEqual(policy.clipboardControl.mode, .blockSelectedApplications)
+        XCTAssertEqual(policy.clipboardControl.blockedApplications.count, 1)
+
+        let invalidJSON = json.replacingOccurrences(
+            of: "\"blockedApplications\": [",
+            with: "\"unexpected\": true, \"blockedApplications\": ["
+        )
+        XCTAssertThrowsError(try VeloxPolicy.decodeStrict(from: Data(invalidJSON.utf8)))
+    }
 }
-
-

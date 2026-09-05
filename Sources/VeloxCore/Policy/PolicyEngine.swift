@@ -225,6 +225,93 @@ public final class PolicyEngine: @unchecked Sendable {
         }
     }
 
+    /// Evaluates outbound file reads made by AirDrop and Bluetooth transfer services.
+    /// The rule intentionally denies read-only access to protected user files while
+    /// allowing write access used by incoming transfers.
+    public func evaluateNearbyTransferOpen(
+        process: ProcessContext,
+        filePath: String,
+        requestedFlags: UInt32,
+        isRegularFile: Bool
+    ) -> NearbyTransferDecision {
+        os_unfair_lock_lock(lock)
+        let policy = self.activePolicy
+        os_unfair_lock_unlock(lock)
+
+        let version = policy.policyVersion
+        let config = policy.nearbyTransferControl
+        let readRequested = (requestedFlags & UInt32(FREAD)) != 0
+        let writeRequested = (requestedFlags & UInt32(FWRITE)) != 0
+        let isEventOnly = (requestedFlags & UInt32(O_EVTONLY)) != 0
+        let isReadOnlyData = readRequested && !writeRequested && !isEventOnly
+        let channel = Self.nearbyTransferChannel(process)
+
+        let channelEnabled: Bool
+        switch channel {
+        case "airdrop", "apple-sharing":
+            channelEnabled = config.blockAirDrop
+        case "bluetooth":
+            channelEnabled = config.blockBluetoothFileTransfer
+        default:
+            channelEnabled = false
+        }
+
+        guard config.mode != .disabled,
+              channelEnabled,
+              isRegularFile,
+              isReadOnlyData,
+              !Self.isBrowserPartialDownloadPath(filePath),
+              !Self.isApplicationOrBundlePath(filePath),
+              !Self.isSystemMetadataPath(filePath),
+              Self.isProtectedUserContentPath(
+                  filePath,
+                  directoryNames: config.protectedDirectoryNames
+              ) else {
+            return NearbyTransferDecision(
+                decisionString: "allowed",
+                shouldAllowOpen: true,
+                isTransferCandidate: false,
+                matchingRuleId: nil,
+                policyVersion: version,
+                channel: channel
+            )
+        }
+
+        let ruleId = channel == "bluetooth"
+            ? "nearby-bluetooth-file-read"
+            : "nearby-airdrop-file-read"
+
+        switch config.mode {
+        case .enforce:
+            return NearbyTransferDecision(
+                decisionString: "blocked",
+                shouldAllowOpen: false,
+                isTransferCandidate: true,
+                matchingRuleId: ruleId,
+                policyVersion: version,
+                channel: channel
+            )
+        case .auditOnly:
+            return NearbyTransferDecision(
+                decisionString: "would-block",
+                shouldAllowOpen: true,
+                isTransferCandidate: true,
+                matchingRuleId: ruleId,
+                policyVersion: version,
+                channel: channel
+            )
+        case .disabled:
+            return NearbyTransferDecision(
+                decisionString: "allowed",
+                shouldAllowOpen: true,
+                isTransferCandidate: false,
+                matchingRuleId: nil,
+                policyVersion: version,
+                channel: channel
+            )
+        }
+    }
+
     /// Evaluates clipboard content file references against protected directories.
     public func evaluateClipboardContent(filePaths: [String]) -> ClipboardDecision {
         os_unfair_lock_lock(lock)
@@ -283,6 +370,51 @@ public final class PolicyEngine: @unchecked Sendable {
                 decisionString: "allowed",
                 shouldBlock: false,
                 blockedPaths: [],
+                matchingRuleId: nil,
+                policyVersion: version
+            )
+        }
+    }
+
+    /// Evaluates a newly copied clipboard item against the configured source-app
+    /// policy. The host agent supplies a code-signing-derived process identity.
+    public func evaluateClipboardCopy(source process: ProcessContext) -> ClipboardControlDecision {
+        os_unfair_lock_lock(lock)
+        let policy = self.activePolicy
+        os_unfair_lock_unlock(lock)
+
+        let version = policy.policyVersion
+        let config = policy.clipboardControl
+
+        switch config.mode {
+        case .disabled:
+            return ClipboardControlDecision(
+                decisionString: "allowed",
+                shouldClearPasteboard: false,
+                matchingRuleId: nil,
+                policyVersion: version
+            )
+
+        case .blockAll:
+            return ClipboardControlDecision(
+                decisionString: "blocked",
+                shouldClearPasteboard: true,
+                matchingRuleId: "clipboard-block-all",
+                policyVersion: version
+            )
+
+        case .blockSelectedApplications:
+            for rule in config.blockedApplications where matches(rule: rule, process: process) {
+                return ClipboardControlDecision(
+                    decisionString: "blocked",
+                    shouldClearPasteboard: true,
+                    matchingRuleId: rule.ruleId,
+                    policyVersion: version
+                )
+            }
+            return ClipboardControlDecision(
+                decisionString: "allowed",
+                shouldClearPasteboard: false,
                 matchingRuleId: nil,
                 policyVersion: version
             )
@@ -402,6 +534,33 @@ public final class PolicyEngine: @unchecked Sendable {
             "/arc.app/"
         ]
         return appPathMarkers.contains(where: executablePath.contains)
+    }
+
+    public static func nearbyTransferChannel(_ process: ProcessContext) -> String? {
+        let signingId = process.signingId?.lowercased() ?? ""
+        let executablePath = process.executablePath.lowercased()
+
+        if signingId == "com.apple.sharingd" ||
+            executablePath == "/usr/libexec/sharingd" {
+            // sharingd is used by AirDrop and by other Apple Share Sheet routes.
+            // Endpoint Security exposes the reading process, not the selected UI destination,
+            // so keep this attribution honest in events and notifications.
+            return "apple-sharing"
+        }
+
+        if signingId == "com.apple.finder.open-airdrop" ||
+            executablePath.contains("/airdrop.app/") {
+            return "airdrop"
+        }
+
+        if signingId == "com.apple.bluetoothfileexchange" ||
+            signingId == "com.apple.obexagent" ||
+            executablePath.contains("/bluetooth file exchange.app/") ||
+            executablePath.contains("/obexagent.app/") {
+            return "bluetooth"
+        }
+
+        return nil
     }
 
     public static func isProtectedUserContentPath(

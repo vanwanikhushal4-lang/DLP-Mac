@@ -15,16 +15,16 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.3.0</string>
+	<string>1.5.0</string>
 	<key>CFBundleVersion</key>
-	<string>8</string>
+	<string>10</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>SBAppUsesLocalNotifications</key>
-	<true/>
-	<key>NSUserNotificationAlertStyle</key>
-	<string>alert</string>
 	<key>NSSystemExtensionUsageDescription</key>
 	<string>Velox Mac DLP installs an Endpoint Security system extension to enforce application-control policy.</string>
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
+	<key>SBAppUsesLocalNotifications</key>
+	<true/>
 </dict>
 </plist>

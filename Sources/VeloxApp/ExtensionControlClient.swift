@@ -29,6 +29,42 @@ final class ExtensionControlClient: @unchecked Sendable {
         }
     }
 
+    func setNearbyTransferMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setNearbyTransferMode(mode, withReply: completion)
+        }
+    }
+
+    func setClipboardMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setClipboardMode(mode, withReply: completion)
+        }
+    }
+
+    func setClipboardApplicationBlocked(
+        signingId: String,
+        executablePath: String,
+        displayName: String,
+        blocked: Bool,
+        completion: @escaping (String) -> Void
+    ) {
+        withProxy(completion: completion) { proxy in
+            proxy.setClipboardApplicationBlocked(
+                signingId: signingId,
+                executablePath: executablePath,
+                displayName: displayName,
+                blocked: blocked,
+                withReply: completion
+            )
+        }
+    }
+
+    func recordClipboardEvent(_ payloadJSON: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.recordClipboardEvent(payloadJSON, withReply: completion)
+        }
+    }
+
     func recordBrowserUploadAttempt(_ payloadJSON: String, completion: @escaping (String) -> Void) {
         withProxy(completion: completion) { proxy in
             proxy.recordBrowserUploadAttempt(payloadJSON, withReply: completion)

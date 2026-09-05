@@ -109,6 +109,40 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
                 self?.deliver(requestId: requestId, json: json)
             }
 
+        case "setNearbyTransferMode":
+            guard let mode = body["mode"] as? String else {
+                deliverError(requestId: requestId, message: "Missing nearby-transfer policy mode.")
+                return
+            }
+            controlClient.setNearbyTransferMode(mode) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
+        case "setClipboardMode":
+            guard let mode = body["mode"] as? String else {
+                deliverError(requestId: requestId, message: "Missing clipboard-control mode.")
+                return
+            }
+            controlClient.setClipboardMode(mode) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
+        case "setClipboardApplicationBlocked":
+            guard let executablePath = body["executablePath"] as? String,
+                  let displayName = body["displayName"] as? String,
+                  let blocked = body["blocked"] as? Bool else {
+                deliverError(requestId: requestId, message: "Invalid clipboard application request.")
+                return
+            }
+            controlClient.setClipboardApplicationBlocked(
+                signingId: body["signingId"] as? String ?? "",
+                executablePath: executablePath,
+                displayName: displayName,
+                blocked: blocked
+            ) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
         case "openSafariExtensionSettings":
             SFSafariApplication.showPreferencesForExtension(
                 withIdentifier: "co.velox.macdlp.uploadguard"

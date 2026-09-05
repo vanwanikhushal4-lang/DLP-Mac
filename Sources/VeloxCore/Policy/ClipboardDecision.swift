@@ -21,3 +21,23 @@ public struct ClipboardDecision: Sendable, Equatable {
         self.policyVersion = policyVersion
     }
 }
+
+/// Decision for a newly created system clipboard item.
+public struct ClipboardControlDecision: Sendable, Equatable {
+    public let decisionString: String // "blocked" or "allowed"
+    public let shouldClearPasteboard: Bool
+    public let matchingRuleId: String?
+    public let policyVersion: Int
+
+    public init(
+        decisionString: String,
+        shouldClearPasteboard: Bool,
+        matchingRuleId: String?,
+        policyVersion: Int
+    ) {
+        self.decisionString = decisionString
+        self.shouldClearPasteboard = shouldClearPasteboard
+        self.matchingRuleId = matchingRuleId
+        self.policyVersion = policyVersion
+    }
+}

@@ -47,6 +47,29 @@ public enum VeloxNotificationFormatter {
             let body = "External storage '\(volumeName)' was blocked from mounting."
             return FormattedNotification(title: title, subtitle: subtitle, body: body)
 
+        case "nearby-transfer-control":
+            let fileName = parseFileName(from: target)
+            let channel: String
+            if action.hasPrefix("bluetooth") {
+                channel = "Bluetooth file transfer"
+            } else if action.hasPrefix("apple-sharing") {
+                channel = "Apple nearby sharing"
+            } else {
+                channel = "AirDrop"
+            }
+            let subtitle = "Nearby Transfer Blocked"
+            let body = "Sending '\(fileName)' through \(channel) was blocked by security policy."
+            return FormattedNotification(title: title, subtitle: subtitle, body: body)
+
+        case "clipboard-control":
+            let subtitle = "Clipboard Copy Blocked"
+            let application = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+            let source = application.isEmpty ? "this application" : application
+            let content = target.trimmingCharacters(in: .whitespacesAndNewlines)
+            let summary = content.isEmpty ? "clipboard data" : content
+            let body = "Copying \(summary) from \(source) was blocked by security policy."
+            return FormattedNotification(title: title, subtitle: subtitle, body: body)
+
         default:
             let subtitle = "Action Blocked"
             let body = "Action '\(action)' on '\(target)' was blocked by security policy."

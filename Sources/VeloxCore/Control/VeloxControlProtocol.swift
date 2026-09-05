@@ -21,6 +21,31 @@ import Foundation
         withReply reply: @escaping (String) -> Void
     )
 
+    func setNearbyTransferMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setClipboardMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setClipboardApplicationBlocked(
+        signingId: String,
+        executablePath: String,
+        displayName: String,
+        blocked: Bool,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// Records a clipboard decision made by the logged-in host agent. Clipboard
+    /// contents are never transmitted; only source identity and coarse data types.
+    func recordClipboardEvent(
+        _ payloadJSON: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
     /// Records a browser-bound upload decision made before the website sees
     /// the selected files. The payload is JSON and is validated by the service.
     func recordBrowserUploadAttempt(

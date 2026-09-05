@@ -5,7 +5,8 @@ import VeloxCore
 import os.log
 
 /// Manages desktop notifications ("Blocked by Velox DLP") for security events across
-/// Application Control, Web Upload Control, and USB Storage Control.
+/// Application Control, Web Upload Control, USB Storage Control, nearby transfer,
+/// and Clipboard Control.
 /// Delivers both a native AppKit floating HUD banner directly on screen and a macOS
 /// Notification Center system banner via out-of-process dispatch.
 public final class VeloxNotificationManager: NSObject, VeloxClientProtocol, UNUserNotificationCenterDelegate, @unchecked Sendable {

@@ -303,6 +303,55 @@ public final class EndpointSecurityService: @unchecked Sendable {
         let fileType = file.stat.st_mode & mode_t(S_IFMT)
         let isRegularFile = fileType == mode_t(S_IFREG)
 
+        let nearbyDecision = policyEngine.evaluateNearbyTransferOpen(
+            process: process,
+            filePath: filePath,
+            requestedFlags: requestedFlags,
+            isRegularFile: isRegularFile
+        )
+
+        if nearbyDecision.isTransferCandidate {
+            let allowedFlags: UInt32 = nearbyDecision.shouldAllowOpen ? UInt32.max : 0
+            let response = es_respond_flags_result(client, message, allowedFlags, false)
+            let responseStatus = response == ES_RESPOND_RESULT_SUCCESS
+                ? "success"
+                : "failed_code_\(response.rawValue)"
+            let endNs = DispatchTime.now().uptimeNanoseconds
+            let latencyMicros = max(1, UInt64((endNs - startNs) / 1_000))
+            let channel = nearbyDecision.channel ?? "nearby"
+            let event = ExecutionEvent(
+                timestamp: nil,
+                eventId: UUID().uuidString,
+                module: "nearby-transfer-control",
+                action: "\(channel)-file-open",
+                decision: nearbyDecision.decisionString,
+                ruleId: nearbyDecision.matchingRuleId,
+                policyVersion: nearbyDecision.policyVersion,
+                executablePath: process.executablePath,
+                signingId: process.signingId,
+                teamId: process.teamId,
+                pid: process.pid,
+                parentPid: process.parentPid,
+                uid: process.uid,
+                decisionLatencyMicros: latencyMicros,
+                authResponseResult: responseStatus,
+                resourcePath: filePath,
+                requestedOpenFlags: requestedFlags,
+                interaction: channel
+            )
+            logger.logEventAsync(event)
+            if nearbyDecision.decisionString == "blocked" && response == ES_RESPOND_RESULT_SUCCESS {
+                notifyBlockedIfHandlerPresent(event)
+            }
+            if response != ES_RESPOND_RESULT_SUCCESS {
+                fputs(
+                    "[VeloxEndpointSecurityService] CRITICAL: nearby AUTH_OPEN response failed: \(response.rawValue)\n",
+                    stderr
+                )
+            }
+            return
+        }
+
         let decision = policyEngine.evaluateWebUploadOpen(
             process: process,
             filePath: filePath,

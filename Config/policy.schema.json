@@ -57,6 +57,67 @@
           }
         }
       }
+    },
+    "usbStorageControl": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"]
+        },
+        "blockExternalStorage": {
+          "type": "boolean"
+        }
+      }
+    },
+    "nearbyTransferControl": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"],
+          "description": "Blocks outbound protected-file reads by AirDrop and Bluetooth transfer services."
+        },
+        "blockAirDrop": {
+          "type": "boolean"
+        },
+        "blockBluetoothFileTransfer": {
+          "type": "boolean"
+        },
+        "protectedDirectoryNames": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^/]+$"
+          }
+        }
+      }
+    },
+    "clipboardControl": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["disabled", "block-all", "block-selected-apps"],
+          "description": "Block all clipboard copies or only copies originating from selected signed applications."
+        },
+        "blockedApplications": {
+          "type": "array",
+          "description": "Source applications denied from placing data on the system clipboard in block-selected-apps mode.",
+          "items": {
+            "$ref": "#/$defs/ApplicationRule"
+          }
+        }
+      }
     }
   },
   "$defs": {

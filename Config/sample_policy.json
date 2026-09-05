@@ -20,5 +20,23 @@
       "Pictures",
       "Public"
     ]
+  },
+  "nearbyTransferControl": {
+    "mode": "disabled",
+    "blockAirDrop": true,
+    "blockBluetoothFileTransfer": true,
+    "protectedDirectoryNames": [
+      "Desktop",
+      "Documents",
+      "Downloads",
+      "Movies",
+      "Music",
+      "Pictures",
+      "Public"
+    ]
+  },
+  "clipboardControl": {
+    "mode": "disabled",
+    "blockedApplications": []
   }
 }
