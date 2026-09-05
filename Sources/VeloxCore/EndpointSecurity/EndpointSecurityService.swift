@@ -117,12 +117,20 @@ public final class EndpointSecurityService: @unchecked Sendable {
             let formatter = ISO8601DateFormatter()
             self.startTimeString = formatter.string(from: Date())
 
-            // AUTH_EXEC enforces application control. AUTH_OPEN provides the
-            // prototype browser-file-upload enforcement path.
-            var events = [ES_EVENT_TYPE_AUTH_EXEC, ES_EVENT_TYPE_AUTH_OPEN]
+            // AUTH_EXEC enforces application control.
+            // AUTH_OPEN enforces web upload control.
+            // AUTH_MOUNT & AUTH_REMOUNT enforce USB / removable media protection.
+            // NOTIFY_UNMOUNT audits removable device disconnects.
+            var events = [
+                ES_EVENT_TYPE_AUTH_EXEC,
+                ES_EVENT_TYPE_AUTH_OPEN,
+                ES_EVENT_TYPE_AUTH_MOUNT,
+                ES_EVENT_TYPE_AUTH_REMOUNT,
+                ES_EVENT_TYPE_NOTIFY_UNMOUNT
+            ]
             let subResult = es_subscribe(newClient!, &events, UInt32(events.count))
             if subResult != ES_RETURN_SUCCESS {
-                let err = "Failed to subscribe to AUTH_EXEC/AUTH_OPEN: \(subResult.rawValue)"
+                let err = "Failed to subscribe to ES events: \(subResult.rawValue)"
                 stop()
                 return .failure(.subscriptionFailed(err))
             }
@@ -232,6 +240,22 @@ public final class EndpointSecurityService: @unchecked Sendable {
                 message: message,
                 startNs: startNs
             )
+        } else if msg.event_type == ES_EVENT_TYPE_AUTH_MOUNT {
+            handleMountMessage(
+                client: client,
+                message: message,
+                startNs: startNs
+            )
+        } else if msg.event_type == ES_EVENT_TYPE_AUTH_REMOUNT {
+            handleRemountMessage(
+                client: client,
+                message: message,
+                startNs: startNs
+            )
+        } else if msg.event_type == ES_EVENT_TYPE_NOTIFY_UNMOUNT {
+            handleUnmountMessage(
+                message: message
+            )
         } else {
             // Guarantee: always respond to any other unhandled AUTH event with ALLOW
             let res = es_respond_auth_result(client, message, ES_AUTH_RESULT_ALLOW, false)
@@ -304,6 +328,182 @@ public final class EndpointSecurityService: @unchecked Sendable {
         )
     }
 
+    private func handleMountMessage(
+        client: OpaquePointer,
+        message: UnsafePointer<es_message_t>,
+        startNs: UInt64
+    ) {
+        let msg = message.pointee
+        let actor = msg.process.pointee
+        let process = extractProcessContext(target: actor)
+        let mountEvent = msg.event.mount
+        var sfs = mountEvent.statfs.pointee
+        let disposition = mountEvent.disposition
+
+        let mountFrom = withUnsafePointer(to: &sfs.f_mntfromname) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(MNAMELEN)) { cStr in
+                String(cString: cStr)
+            }
+        }
+        let mountPoint = withUnsafePointer(to: &sfs.f_mntonname) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(MNAMELEN)) { cStr in
+                String(cString: cStr)
+            }
+        }
+        let fsType = withUnsafePointer(to: &sfs.f_fstypename) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(MFSNAMELEN)) { cStr in
+                String(cString: cStr)
+            }
+        }
+
+        let decision = policyEngine.evaluateMount(
+            process: process,
+            mountFrom: mountFrom,
+            mountPoint: mountPoint,
+            fsType: fsType,
+            disposition: disposition
+        )
+
+        let authResult: es_auth_result_t = decision.shouldAllowMount ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY
+        let response = es_respond_auth_result(client, message, authResult, false)
+        let responseStatus = response == ES_RESPOND_RESULT_SUCCESS ? "success" : "failed_code_\(response.rawValue)"
+
+        guard decision.isUSBMountCandidate else { return }
+
+        let endNs = DispatchTime.now().uptimeNanoseconds
+        let latencyMicros = max(1, UInt64((endNs - startNs) / 1_000))
+        logger.logEventAsync(
+            ExecutionEvent(
+                timestamp: nil,
+                eventId: UUID().uuidString,
+                module: "usb-storage-control",
+                action: "mount",
+                decision: decision.decisionString,
+                ruleId: decision.matchingRuleId,
+                policyVersion: decision.policyVersion,
+                executablePath: process.executablePath,
+                signingId: process.signingId,
+                teamId: process.teamId,
+                pid: process.pid,
+                parentPid: process.parentPid,
+                uid: process.uid,
+                decisionLatencyMicros: latencyMicros,
+                authResponseResult: responseStatus,
+                resourcePath: "\(mountFrom) -> \(mountPoint) (\(fsType))"
+            )
+        )
+    }
+
+    private func handleRemountMessage(
+        client: OpaquePointer,
+        message: UnsafePointer<es_message_t>,
+        startNs: UInt64
+    ) {
+        let msg = message.pointee
+        let actor = msg.process.pointee
+        let process = extractProcessContext(target: actor)
+        let remountEvent = msg.event.remount
+        var sfs = remountEvent.statfs.pointee
+        let disposition = remountEvent.disposition
+
+        let mountFrom = withUnsafePointer(to: &sfs.f_mntfromname) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(MNAMELEN)) { cStr in
+                String(cString: cStr)
+            }
+        }
+        let mountPoint = withUnsafePointer(to: &sfs.f_mntonname) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(MNAMELEN)) { cStr in
+                String(cString: cStr)
+            }
+        }
+        let fsType = withUnsafePointer(to: &sfs.f_fstypename) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(MFSNAMELEN)) { cStr in
+                String(cString: cStr)
+            }
+        }
+
+        let decision = policyEngine.evaluateMount(
+            process: process,
+            mountFrom: mountFrom,
+            mountPoint: mountPoint,
+            fsType: fsType,
+            disposition: disposition
+        )
+
+        let authResult: es_auth_result_t = decision.shouldAllowMount ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY
+        let response = es_respond_auth_result(client, message, authResult, false)
+        let responseStatus = response == ES_RESPOND_RESULT_SUCCESS ? "success" : "failed_code_\(response.rawValue)"
+
+        guard decision.isUSBMountCandidate else { return }
+
+        let endNs = DispatchTime.now().uptimeNanoseconds
+        let latencyMicros = max(1, UInt64((endNs - startNs) / 1_000))
+        logger.logEventAsync(
+            ExecutionEvent(
+                timestamp: nil,
+                eventId: UUID().uuidString,
+                module: "usb-storage-control",
+                action: "remount",
+                decision: decision.decisionString,
+                ruleId: decision.matchingRuleId,
+                policyVersion: decision.policyVersion,
+                executablePath: process.executablePath,
+                signingId: process.signingId,
+                teamId: process.teamId,
+                pid: process.pid,
+                parentPid: process.parentPid,
+                uid: process.uid,
+                decisionLatencyMicros: latencyMicros,
+                authResponseResult: responseStatus,
+                resourcePath: "\(mountFrom) -> \(mountPoint) (\(fsType))"
+            )
+        )
+    }
+
+    private func handleUnmountMessage(
+        message: UnsafePointer<es_message_t>
+    ) {
+        let msg = message.pointee
+        let actor = msg.process.pointee
+        let process = extractProcessContext(target: actor)
+        let unmountEvent = msg.event.unmount
+        var sfs = unmountEvent.statfs.pointee
+
+        let mountFrom = withUnsafePointer(to: &sfs.f_mntfromname) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(MNAMELEN)) { cStr in
+                String(cString: cStr)
+            }
+        }
+        let mountPoint = withUnsafePointer(to: &sfs.f_mntonname) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(MNAMELEN)) { cStr in
+                String(cString: cStr)
+            }
+        }
+
+        guard mountPoint.hasPrefix("/Volumes/") else { return }
+
+        logger.logEventAsync(
+            ExecutionEvent(
+                timestamp: nil,
+                eventId: UUID().uuidString,
+                module: "usb-storage-control",
+                action: "unmount",
+                decision: "allowed",
+                ruleId: "usb-storage-unmount",
+                policyVersion: policyEngine.currentPolicy().policyVersion,
+                executablePath: process.executablePath,
+                signingId: process.signingId,
+                teamId: process.teamId,
+                pid: process.pid,
+                parentPid: process.parentPid,
+                uid: process.uid,
+                decisionLatencyMicros: 1,
+                authResponseResult: "notify",
+                resourcePath: "\(mountFrom) -> \(mountPoint)"
+            )
+        )
+    }
+
     public func extractProcessContext(target: es_process_t) -> ProcessContext {
         let path = stringFromToken(target.executable.pointee.path) ?? ""
         let signingId = stringFromToken(target.signing_id)
@@ -343,7 +543,13 @@ public final class EndpointSecurityService: @unchecked Sendable {
         let record = HealthStatus(
             status: status,
             lastStarted: startTimeString,
-            subscribedEvents: ["ES_EVENT_TYPE_AUTH_EXEC", "ES_EVENT_TYPE_AUTH_OPEN"],
+            subscribedEvents: [
+                "ES_EVENT_TYPE_AUTH_EXEC",
+                "ES_EVENT_TYPE_AUTH_OPEN",
+                "ES_EVENT_TYPE_AUTH_MOUNT",
+                "ES_EVENT_TYPE_AUTH_REMOUNT",
+                "ES_EVENT_TYPE_NOTIFY_UNMOUNT"
+            ],
             lastError: error,
             totalAuthHandled: totalAuthHandled,
             totalDeadlineMisses: totalDeadlineMisses

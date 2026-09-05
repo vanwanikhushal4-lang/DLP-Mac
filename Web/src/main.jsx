@@ -87,13 +87,19 @@ function AppRow({ app, blocked, busy, onToggle }) {
 }
 
 function EventRow({ event }) {
-  const isUploadEvent = event.module === "web-upload-control";
-  const appName = isUploadEvent
-    ? event.resourcePath?.split("/").pop() || "Protected file"
-    : event.executablePath?.split("/").pop() || event.signingId || "Unknown";
-  const detail = isUploadEvent
-    ? `${event.signingId || "Browser"} · ${event.resourcePath || "Unknown file"}`
-    : event.signingId || event.executablePath;
+  const isUploadEvent = event.module === "web-upload-control" || event.module === "clipboard-control";
+  const isUSBEvent = event.module === "usb-storage-control";
+  let appName = event.executablePath?.split("/").pop() || event.signingId || "Unknown";
+  let detail = event.signingId || event.executablePath;
+
+  if (isUploadEvent) {
+    appName = event.resourcePath?.split("/").pop() || "Protected file";
+    detail = `${event.signingId || "Browser"} · ${event.resourcePath || "Unknown file"}`;
+  } else if (isUSBEvent) {
+    appName = event.action === "mount" ? "USB Storage Mount" : (event.action === "remount" ? "USB Remount" : "USB Disconnect");
+    detail = `${event.resourcePath || "External Drive"}`;
+  }
+
   const time = event.timestamp ? new Date(event.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
   return (
     <div className="event-row">
@@ -114,6 +120,7 @@ function App() {
   const [busyApp, setBusyApp] = useState(null);
   const [busyMode, setBusyMode] = useState(false);
   const [busyWebUpload, setBusyWebUpload] = useState(false);
+  const [busyUSBStorage, setBusyUSBStorage] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -206,25 +213,55 @@ function App() {
     }
   }
 
-  async function openSafariSettings() {
+  async function changeUSBStorageMode(mode) {
+    setBusyUSBStorage(true);
+    setNotice("");
     try {
-      const resp = await nativeCall("openSafariExtensionSettings");
-      setNotice(resp?.message || "In Safari: Ensure Develop > 'Allow Unsigned Extensions' is enabled, then turn on Velox DLP Upload Guard in Settings > Extensions.");
+      const value = await nativeCall("setUSBStorageMode", { mode });
+      setSnapshot(value);
+      setNotice(`USB storage protection is now ${modeCopy[mode].label.toLowerCase()}.`);
+      await refreshEvents();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to open Safari settings.");
+      setError(err.message);
+    } finally {
+      setBusyUSBStorage(false);
     }
   }
 
   const online = snapshot?.extensionStatus === "enforcing";
   const mode = snapshot?.mode || "audit-only";
   const webUploadMode = snapshot?.webUploadMode || "disabled";
+  const usbStorageMode = snapshot?.usbStorageMode || "enforce";
   const blockedCount = snapshot?.blockedRuleCount || 0;
   const protectedFolders = snapshot?.webUploadProtectedDirectories || [];
-  const visibleEvents = events.filter(event => activeFeature === "web-upload"
-    ? (event.module === "web-upload-control" || event.module === "clipboard-control")
-    : (event.module !== "web-upload-control" && event.module !== "clipboard-control"));
+
+  const visibleEvents = events.filter(event => {
+    if (activeFeature === "web-upload") {
+      return event.module === "web-upload-control" || event.module === "clipboard-control";
+    }
+    if (activeFeature === "usb-storage") {
+      return event.module === "usb-storage-control";
+    }
+    return event.module !== "web-upload-control" && event.module !== "clipboard-control" && event.module !== "usb-storage-control";
+  });
+
   const recentUploadBlocks = events.filter(event => (event.module === "web-upload-control" || event.module === "clipboard-control") && event.decision === "blocked").length;
-  const isWebUploadView = activeFeature === "web-upload";
+  const recentUSBBlocks = events.filter(event => event.module === "usb-storage-control" && event.decision === "blocked").length;
+
+  const featureMeta = {
+    "applications": {
+      title: "Application Control",
+      subtitle: "Control which applications can run on this endpoint."
+    },
+    "web-upload": {
+      title: "Web Upload Control",
+      subtitle: "Prevent protected files from leaving this Mac through supported browsers."
+    },
+    "usb-storage": {
+      title: "USB Removable Media Control",
+      subtitle: "Prevent unauthorized external USB and Type-C mass storage drives from mounting."
+    }
+  }[activeFeature] || { title: "DLP Control", subtitle: "" };
 
   return (
     <div className="shell">
@@ -232,20 +269,21 @@ function App() {
         <div className="brand"><ShieldMark /><div><strong>Velox</strong><span>Mac DLP</span></div></div>
         <nav>
           <button disabled><span>⌂</span>Overview</button>
-          <button className={!isWebUploadView ? "active" : ""} onClick={() => setActiveFeature("applications")}><span>▦</span>Application Control</button>
-          <button className={isWebUploadView ? "active" : ""} onClick={() => setActiveFeature("web-upload")}><span>⇧</span>Web Upload Control</button>
+          <button className={activeFeature === "applications" ? "active" : ""} onClick={() => setActiveFeature("applications")}><span>▦</span>Application Control</button>
+          <button className={activeFeature === "web-upload" ? "active" : ""} onClick={() => setActiveFeature("web-upload")}><span>⇧</span>Web Upload Control</button>
+          <button className={activeFeature === "usb-storage" ? "active" : ""} onClick={() => setActiveFeature("usb-storage")}><span>⏏</span>USB Storage Control</button>
           <button disabled><span>≋</span>Activity</button>
           <button disabled><span>⚙</span>Agent Settings</button>
         </nav>
-        <div className="sidebar-status"><StatusPill online={online} /><span>Agent 1.2.4</span></div>
+        <div className="sidebar-status"><StatusPill online={online} /><span>Agent 1.3.0</span></div>
       </aside>
 
       <main>
         <header>
           <div>
             <p className="eyebrow">ENDPOINT / THIS MAC</p>
-            <h1>{isWebUploadView ? "Web Upload Control" : "Application Control"}</h1>
-            <p>{isWebUploadView ? "Prevent protected files from leaving this Mac through supported browsers." : "Control which applications can run on this endpoint."}</p>
+            <h1>{featureMeta.title}</h1>
+            <p>{featureMeta.subtitle}</p>
           </div>
           <StatusPill online={online} />
         </header>
@@ -253,7 +291,7 @@ function App() {
         {error && <div className="banner error"><strong>Control service unavailable</strong><span>{error}</span></div>}
         {notice && <div className="banner success"><strong>Policy activated</strong><span>{notice}</span></div>}
 
-        {!isWebUploadView ? <>
+        {activeFeature === "applications" && <>
           <section className="summary-grid">
             <article><span className="card-label">PROTECTION MODE</span><strong>{modeCopy[mode]?.label}</strong><p>{modeCopy[mode]?.detail}</p></article>
             <article><span className="card-label">BLOCKED APPLICATIONS</span><strong>{blockedCount}</strong><p>Signing identities currently denied.</p></article>
@@ -280,7 +318,9 @@ function App() {
               {!filteredApps.length && apps.length > 0 && <div className="empty">No applications match “{query}”.</div>}
             </div>
           </section>
-        </> : <>
+        </>}
+
+        {activeFeature === "web-upload" && <>
           <section className="summary-grid">
             <article><span className="card-label">UPLOAD PROTECTION</span><strong>{modeCopy[webUploadMode]?.label}</strong><p>Downloads and normal browser traffic remain allowed.</p></article>
             <article><span className="card-label">RECENTLY BLOCKED</span><strong>{recentUploadBlocks}</strong><p>Upload candidates in the current activity window.</p></article>
@@ -313,11 +353,44 @@ function App() {
           </section>
         </>}
 
+        {activeFeature === "usb-storage" && <>
+          <section className="summary-grid">
+            <article><span className="card-label">USB PROTECTION</span><strong>{modeCopy[usbStorageMode]?.label}</strong><p>External USB & Type-C storage mounts.</p></article>
+            <article><span className="card-label">BLOCKED MOUNTS</span><strong>{recentUSBBlocks}</strong><p>Blocked external drive mount attempts.</p></article>
+            <article><span className="card-label">DISPOSITION ENGINE</span><strong className="state-enabled">Kernel AUTH_MOUNT</strong><p>Intercepts filesystem mounts at the kernel level.</p></article>
+          </section>
+
+          <section className="panel upload-panel">
+            <div className="upload-heading">
+              <div className="upload-icon">⏏</div>
+              <div>
+                <div className="title-with-badge"><h2>USB & Type-C storage protection</h2><span>KERNEL DLP</span></div>
+                <p>Blocks external flash drives, portable SSDs, and SD cards before macOS can mount them to /Volumes. Keyboards, mice, monitors, and Type-C chargers remain allowed.</p>
+              </div>
+            </div>
+            <div className="upload-controls">
+              <div className="protected-folders">
+                <span>COVERED INTERFACES</span>
+                <strong>USB-A · USB-C · Thunderbolt · SD Card Readers</strong>
+              </div>
+              <div className="segmented">
+                {Object.entries(modeCopy).map(([value, copy]) => (
+                  <button key={value} className={usbStorageMode === value ? "selected" : ""} disabled={busyUSBStorage || !online} onClick={() => changeUSBStorageMode(value)}>{copy.label}</button>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="panel coverage-panel">
+            <div><span className="coverage-state">KERNEL DISPOSITION INVARIANT</span><h2>ES_MOUNT_DISPOSITION_EXTERNAL</h2><p>Endpoint Security checks each mount request's physical device disposition. Internal APFS system partitions and application translocations are guaranteed safe, while external mass storage volumes are denied at the Darwin VFS boundary.</p></div>
+          </section>
+        </>}
+
         <section className="panel activity-panel">
-          <div className="panel-heading"><div><h2>Live activity</h2><p>{isWebUploadView ? "Latest browser file-transfer decisions from Endpoint Security" : "Latest application execution decisions from Endpoint Security"}</p></div><button className="refresh" onClick={refreshEvents}>Refresh</button></div>
+          <div className="panel-heading"><div><h2>Live activity</h2><p>{activeFeature === "usb-storage" ? "Latest USB storage mount decisions from Endpoint Security" : activeFeature === "web-upload" ? "Latest browser file-transfer decisions from Endpoint Security" : "Latest application execution decisions from Endpoint Security"}</p></div><button className="refresh" onClick={refreshEvents}>Refresh</button></div>
           <div className="event-list">
             {visibleEvents.slice().reverse().slice(0, 12).map(event => <EventRow key={event.eventId} event={event} />)}
-            {!visibleEvents.length && <div className="empty">No {isWebUploadView ? "browser upload" : "application execution"} events recorded yet.</div>}
+            {!visibleEvents.length && <div className="empty">No {activeFeature === "usb-storage" ? "USB storage" : activeFeature === "web-upload" ? "browser upload" : "application execution"} events recorded yet.</div>}
           </div>
         </section>
       </main>

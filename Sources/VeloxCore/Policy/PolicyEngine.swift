@@ -1,6 +1,7 @@
 import Foundation
 import Darwin
 import os
+import EndpointSecurity
 
 public struct PolicyDecision: Sendable, Equatable {
     public let decisionString: String // "blocked", "allowed", "would-block"
@@ -284,6 +285,86 @@ public final class PolicyEngine: @unchecked Sendable {
                 blockedPaths: [],
                 matchingRuleId: nil,
                 policyVersion: version
+            )
+        }
+    }
+
+    /// Evaluates a filesystem mount event for USB / removable media protection.
+    public func evaluateMount(
+        process: ProcessContext,
+        mountFrom: String,
+        mountPoint: String,
+        fsType: String,
+        disposition: es_mount_disposition_t
+    ) -> USBMountDecision {
+        os_unfair_lock_lock(lock)
+        let policy = self.activePolicy
+        os_unfair_lock_unlock(lock)
+
+        let version = policy.policyVersion
+        let config = policy.usbStorageControl
+        let mode = config.mode
+
+        let dispositionStr: String
+        switch disposition {
+        case ES_MOUNT_DISPOSITION_EXTERNAL: dispositionStr = "external"
+        case ES_MOUNT_DISPOSITION_INTERNAL: dispositionStr = "internal"
+        case ES_MOUNT_DISPOSITION_NETWORK: dispositionStr = "network"
+        case ES_MOUNT_DISPOSITION_VIRTUAL: dispositionStr = "virtual"
+        case ES_MOUNT_DISPOSITION_NULLFS: dispositionStr = "nullfs"
+        default: dispositionStr = "unknown"
+        }
+
+        // CRITICAL INVARIANT: NEVER block internal system storage or nullfs/app translocation.
+        guard disposition == ES_MOUNT_DISPOSITION_EXTERNAL else {
+            return USBMountDecision(
+                decisionString: "allowed",
+                shouldAllowMount: true,
+                isUSBMountCandidate: false,
+                matchingRuleId: nil,
+                policyVersion: version,
+                dispositionString: dispositionStr
+            )
+        }
+
+        guard mode != .disabled, config.blockExternalStorage else {
+            return USBMountDecision(
+                decisionString: "allowed",
+                shouldAllowMount: true,
+                isUSBMountCandidate: true,
+                matchingRuleId: nil,
+                policyVersion: version,
+                dispositionString: dispositionStr
+            )
+        }
+
+        switch mode {
+        case .enforce:
+            return USBMountDecision(
+                decisionString: "blocked",
+                shouldAllowMount: false,
+                isUSBMountCandidate: true,
+                matchingRuleId: "usb-storage-block-external",
+                policyVersion: version,
+                dispositionString: dispositionStr
+            )
+        case .auditOnly:
+            return USBMountDecision(
+                decisionString: "would-block",
+                shouldAllowMount: true,
+                isUSBMountCandidate: true,
+                matchingRuleId: "usb-storage-audit-external",
+                policyVersion: version,
+                dispositionString: dispositionStr
+            )
+        case .disabled:
+            return USBMountDecision(
+                decisionString: "allowed",
+                shouldAllowMount: true,
+                isUSBMountCandidate: false,
+                matchingRuleId: nil,
+                policyVersion: version,
+                dispositionString: dispositionStr
             )
         }
     }

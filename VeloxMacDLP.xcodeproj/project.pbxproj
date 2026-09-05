@@ -27,6 +27,7 @@
 		7FF8AB80B6BCFBF3A807EEB0 /* EventLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8459957CCF679341C61B3D2C /* EventLogger.swift */; };
 		80ABB2C7F7B491AD084EDB9C /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 266D16FF787B8DEF8EDF9C43 /* background.js */; };
 		824E8CA6DB9FDDD1098C5647 /* ClipboardDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BE1F9CB74E8BC66BF68CF0 /* ClipboardDecision.swift */; };
+		85118CDE99F5C0650D693E13 /* USBMountDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBA39EE7E17FC9673CF54F21 /* USBMountDecision.swift */; };
 		921147591CB5C2DE21D84FC2 /* BundledWebSchemeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58587F3DE67C667C45F46A7 /* BundledWebSchemeHandler.swift */; };
 		932CFBA95C3F752D573FC8A2 /* libVeloxCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82882244835FE33A8714983D /* libVeloxCore.a */; };
 		99343249A49421511AAF7834 /* libVeloxCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82882244835FE33A8714983D /* libVeloxCore.a */; };
@@ -139,6 +140,7 @@
 		D188E5ECFB2A5166368BE0C3 /* ControlService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlService.swift; sourceTree = "<group>"; };
 		DDF89EA6F481543896EFCCED /* dist */ = {isa = PBXFileReference; lastKnownFileType = folder; name = dist; path = Web/dist; sourceTree = SOURCE_ROOT; };
 		E848C9198C7BDCF17BF943E0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		EBA39EE7E17FC9673CF54F21 /* USBMountDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = USBMountDecision.swift; sourceTree = "<group>"; };
 		ECE0F4E4B48C74AF8C496E2E /* PolicyModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyModel.swift; sourceTree = "<group>"; };
 		F6BCD21227DF6C1714AA35DB /* VeloxControlProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VeloxControlProtocol.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -178,6 +180,7 @@
 				5237E6CF7500B33B4AB5F140 /* PolicyEngine.swift */,
 				0F0B42A9DD8BC115FDE2AA6A /* PolicyManager.swift */,
 				ECE0F4E4B48C74AF8C496E2E /* PolicyModel.swift */,
+				EBA39EE7E17FC9673CF54F21 /* USBMountDecision.swift */,
 			);
 			path = Policy;
 			sourceTree = "<group>";
@@ -565,6 +568,7 @@
 				9E19391BE6C90FD93C33A0DD /* PolicyModel.swift in Sources */,
 				F168C25071F87FA7EE01F690 /* ProcessContext.swift in Sources */,
 				DC0893EE91F2C320157EE04A /* SecurityGuardian.swift in Sources */,
+				85118CDE99F5C0650D693E13 /* USBMountDecision.swift in Sources */,
 				34CA9FBB775B00917A2B3D67 /* VeloxControlProtocol.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

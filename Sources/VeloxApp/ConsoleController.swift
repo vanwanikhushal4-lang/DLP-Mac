@@ -87,6 +87,15 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
                 self?.deliver(requestId: requestId, json: json)
             }
 
+        case "setUSBStorageMode":
+            guard let mode = body["mode"] as? String else {
+                deliverError(requestId: requestId, message: "Missing usb-storage policy mode.")
+                return
+            }
+            controlClient.setUSBStorageMode(mode) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
         case "openSafariExtensionSettings":
             SFSafariApplication.showPreferencesForExtension(
                 withIdentifier: "co.velox.macdlp.uploadguard"

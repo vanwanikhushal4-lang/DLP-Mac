@@ -13,6 +13,7 @@ private struct ControlSnapshot: Codable {
     let blockedExecutablePaths: [String]
     let webUploadMode: String
     let webUploadProtectedDirectories: [String]
+    let usbStorageMode: String
     let totalAuthHandled: UInt64
     let totalDeadlineMisses: UInt64
     let message: String?
@@ -153,7 +154,8 @@ final class VeloxControlService: NSObject, VeloxControlProtocol {
                 blockedApplications: current.applicationControl.blockedApplications,
                 allowedApplications: current.applicationControl.allowedApplications
             ),
-            webUploadControl: current.webUploadControl
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: current.usbStorageControl
         )
         apply(updated, reply: reply)
     }
@@ -174,6 +176,29 @@ final class VeloxControlService: NSObject, VeloxControlProtocol {
             webUploadControl: WebUploadControlConfig(
                 mode: requestedMode,
                 protectedDirectoryNames: current.webUploadControl.protectedDirectoryNames
+            ),
+            usbStorageControl: current.usbStorageControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setUSBStorageMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedMode = PolicyMode(rawValue: mode) else {
+            reply(errorJSON("Unsupported usb-storage mode '\(mode)'."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: USBStorageControlConfig(
+                mode: requestedMode,
+                blockExternalStorage: current.usbStorageControl.blockExternalStorage
             )
         )
         apply(updated, reply: reply)
@@ -278,7 +303,8 @@ final class VeloxControlService: NSObject, VeloxControlProtocol {
                 blockedApplications: blockedRules,
                 allowedApplications: current.applicationControl.allowedApplications
             ),
-            webUploadControl: current.webUploadControl
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: current.usbStorageControl
         )
         apply(updated, reply: reply)
     }
@@ -325,6 +351,7 @@ final class VeloxControlService: NSObject, VeloxControlProtocol {
                 blockedExecutablePaths: policy.applicationControl.blockedApplications.compactMap(\.executablePath),
                 webUploadMode: policy.webUploadControl.mode.rawValue,
                 webUploadProtectedDirectories: policy.webUploadControl.protectedDirectoryNames,
+                usbStorageMode: policy.usbStorageControl.mode.rawValue,
                 totalAuthHandled: health?.totalAuthHandled ?? 0,
                 totalDeadlineMisses: health?.totalDeadlineMisses ?? 0,
                 message: nil

@@ -34,8 +34,8 @@ targets:
       path: Sources/VeloxExtension/Info.plist
       properties:
         CFBundlePackageType: SYSX
-        CFBundleShortVersionString: "1.2.4"
-        CFBundleVersion: "7"
+        CFBundleShortVersionString: "1.3.0"
+        CFBundleVersion: "8"
         NSSystemExtensionUsageDescription: Velox Mac DLP monitors and controls application execution to enforce organizational security policy.
         NSEndpointSecurityMachServiceName: L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc
     entitlements:
@@ -71,8 +71,8 @@ targets:
       path: Sources/VeloxSafariUploadGuard/Info.plist
       properties:
         CFBundleDisplayName: Velox DLP Upload Guard
-        CFBundleShortVersionString: "1.2.4"
-        CFBundleVersion: "7"
+        CFBundleShortVersionString: "1.3.0"
+        CFBundleVersion: "8"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.Safari.web-extension
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
@@ -110,8 +110,8 @@ targets:
     info:
       path: Sources/VeloxApp/Info.plist
       properties:
-        CFBundleShortVersionString: "1.2.4"
-        CFBundleVersion: "7"
+        CFBundleShortVersionString: "1.3.0"
+        CFBundleVersion: "8"
         LSUIElement: true
         NSSystemExtensionUsageDescription: Velox Mac DLP installs an Endpoint Security system extension to enforce application-control policy.
     entitlements:

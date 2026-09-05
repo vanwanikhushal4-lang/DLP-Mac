@@ -182,19 +182,48 @@ public struct WebUploadControlConfig: Codable, Sendable, Equatable {
     }
 }
 
+public struct USBStorageControlConfig: Codable, Sendable, Equatable {
+    public let mode: PolicyMode
+    public let blockExternalStorage: Bool
+
+    public init(
+        mode: PolicyMode = .enforce,
+        blockExternalStorage: Bool = true
+    ) {
+        self.mode = mode
+        self.blockExternalStorage = blockExternalStorage
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decode(PolicyMode.self, forKey: .mode)
+        self.blockExternalStorage = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .blockExternalStorage
+        ) ?? true
+    }
+
+    public func validate() throws {
+        // Enforced via enum decoding
+    }
+}
+
 public struct VeloxPolicy: Codable, Sendable, Equatable {
     public let policyVersion: Int
     public let applicationControl: ApplicationControlConfig
     public let webUploadControl: WebUploadControlConfig
+    public let usbStorageControl: USBStorageControlConfig
 
     public init(
         policyVersion: Int,
         applicationControl: ApplicationControlConfig,
-        webUploadControl: WebUploadControlConfig = WebUploadControlConfig()
+        webUploadControl: WebUploadControlConfig = WebUploadControlConfig(),
+        usbStorageControl: USBStorageControlConfig = USBStorageControlConfig()
     ) {
         self.policyVersion = policyVersion
         self.applicationControl = applicationControl
         self.webUploadControl = webUploadControl
+        self.usbStorageControl = usbStorageControl
     }
 
     public init(from decoder: Decoder) throws {
@@ -205,6 +234,10 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             WebUploadControlConfig.self,
             forKey: .webUploadControl
         ) ?? WebUploadControlConfig()
+        self.usbStorageControl = try container.decodeIfPresent(
+            USBStorageControlConfig.self,
+            forKey: .usbStorageControl
+        ) ?? USBStorageControlConfig()
     }
 
     /// Strictly parses and validates JSON data, rejecting any unknown properties or malformed fields.
@@ -214,7 +247,12 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         }
 
         // Validate top-level keys
-        let validTopKeys: Set<String> = ["policyVersion", "applicationControl", "webUploadControl"]
+        let validTopKeys: Set<String> = [
+            "policyVersion",
+            "applicationControl",
+            "webUploadControl",
+            "usbStorageControl"
+        ]
         for key in jsonObject.keys {
             if !validTopKeys.contains(key) {
                 throw PolicyValidationError.unknownProperty("Unknown property '\(key)' at policy root")
@@ -270,6 +308,17 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             }
         }
 
+        if let usbStorageObj = jsonObject["usbStorageControl"] as? [String: Any] {
+            let validUsbKeys: Set<String> = ["mode", "blockExternalStorage"]
+            for key in usbStorageObj.keys {
+                if !validUsbKeys.contains(key) {
+                    throw PolicyValidationError.unknownProperty(
+                        "Unknown property '\(key)' in usbStorageControl"
+                    )
+                }
+            }
+        }
+
         let policy = try JSONDecoder().decode(VeloxPolicy.self, from: data)
         try policy.validate()
         return policy
@@ -281,6 +330,7 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         }
 
         try webUploadControl.validate()
+        try usbStorageControl.validate()
 
         var seenRuleIds = Set<String>()
         for rule in applicationControl.allowedApplications {

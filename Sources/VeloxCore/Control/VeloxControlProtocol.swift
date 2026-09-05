@@ -16,6 +16,11 @@ import Foundation
         withReply reply: @escaping (String) -> Void
     )
 
+    func setUSBStorageMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
     /// Records a browser-bound upload decision made before the website sees
     /// the selected files. The payload is JSON and is validated by the service.
     func recordBrowserUploadAttempt(

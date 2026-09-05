@@ -1,5 +1,6 @@
 import XCTest
 import Darwin
+import EndpointSecurity
 @testable import VeloxCore
 
 final class PolicyEngineTests: XCTestCase {
@@ -521,6 +522,147 @@ final class PolicyEngineTests: XCTestCase {
         let decision = engine.evaluateClipboardContent(filePaths: ["/Users/alice/Desktop/secret.pdf"])
         XCTAssertFalse(decision.shouldBlock)
         XCTAssertEqual(decision.decisionString, "allowed")
+    }
+
+    func testUSBMountEnforcementBlocksExternalDrive() {
+        let policy = VeloxPolicy(
+            policyVersion: 18,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce),
+            usbStorageControl: USBStorageControlConfig(mode: .enforce, blockExternalStorage: true)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let diskarbitrationd = ProcessContext(
+            pid: 100, parentPid: 1, uid: 0,
+            signingId: "com.apple.diskarbitrationd", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/usr/libexec/diskarbitrationd"
+        )
+
+        let decision = engine.evaluateMount(
+            process: diskarbitrationd,
+            mountFrom: "/dev/disk3s1",
+            mountPoint: "/Volumes/USB_FLASH",
+            fsType: "exfat",
+            disposition: ES_MOUNT_DISPOSITION_EXTERNAL
+        )
+
+        XCTAssertFalse(decision.shouldAllowMount, "External USB mount must be blocked in enforce mode")
+        XCTAssertTrue(decision.isUSBMountCandidate)
+        XCTAssertEqual(decision.decisionString, "blocked")
+        XCTAssertEqual(decision.dispositionString, "external")
+        XCTAssertEqual(decision.matchingRuleId, "usb-storage-block-external")
+    }
+
+    func testUSBMountInternalDriveAlwaysAllowed() {
+        let policy = VeloxPolicy(
+            policyVersion: 19,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce),
+            usbStorageControl: USBStorageControlConfig(mode: .enforce, blockExternalStorage: true)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let kernel = ProcessContext(
+            pid: 1, parentPid: 0, uid: 0,
+            signingId: "com.apple.kernel", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Library/Kernels/kernel"
+        )
+
+        let decision = engine.evaluateMount(
+            process: kernel,
+            mountFrom: "/dev/disk1s1",
+            mountPoint: "/",
+            fsType: "apfs",
+            disposition: ES_MOUNT_DISPOSITION_INTERNAL
+        )
+
+        XCTAssertTrue(decision.shouldAllowMount, "Internal storage mount must NEVER be blocked")
+        XCTAssertFalse(decision.isUSBMountCandidate)
+        XCTAssertEqual(decision.decisionString, "allowed")
+        XCTAssertEqual(decision.dispositionString, "internal")
+    }
+
+    func testUSBMountAuditOnlyMode() {
+        let policy = VeloxPolicy(
+            policyVersion: 20,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce),
+            usbStorageControl: USBStorageControlConfig(mode: .auditOnly, blockExternalStorage: true)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let diskarbitrationd = ProcessContext(
+            pid: 100, parentPid: 1, uid: 0,
+            signingId: "com.apple.diskarbitrationd", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/usr/libexec/diskarbitrationd"
+        )
+
+        let decision = engine.evaluateMount(
+            process: diskarbitrationd,
+            mountFrom: "/dev/disk4s1",
+            mountPoint: "/Volumes/SANDISK",
+            fsType: "msdos",
+            disposition: ES_MOUNT_DISPOSITION_EXTERNAL
+        )
+
+        XCTAssertTrue(decision.shouldAllowMount, "Audit-only mode must allow mount")
+        XCTAssertTrue(decision.isUSBMountCandidate)
+        XCTAssertEqual(decision.decisionString, "would-block")
+        XCTAssertEqual(decision.dispositionString, "external")
+    }
+
+    func testUSBMountDisabledMode() {
+        let policy = VeloxPolicy(
+            policyVersion: 21,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce),
+            usbStorageControl: USBStorageControlConfig(mode: .disabled, blockExternalStorage: true)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let diskarbitrationd = ProcessContext(
+            pid: 100, parentPid: 1, uid: 0,
+            signingId: "com.apple.diskarbitrationd", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/usr/libexec/diskarbitrationd"
+        )
+
+        let decision = engine.evaluateMount(
+            process: diskarbitrationd,
+            mountFrom: "/dev/disk4s1",
+            mountPoint: "/Volumes/SANDISK",
+            fsType: "msdos",
+            disposition: ES_MOUNT_DISPOSITION_EXTERNAL
+        )
+
+        XCTAssertTrue(decision.shouldAllowMount)
+        XCTAssertEqual(decision.decisionString, "allowed")
+    }
+
+    func testUSBPolicyStrictDecodingAndValidation() throws {
+        let json = """
+        {
+            "policyVersion": 22,
+            "applicationControl": {
+                "mode": "enforce",
+                "blockedApplications": [],
+                "allowedApplications": []
+            },
+            "webUploadControl": {
+                "mode": "enforce",
+                "protectedDirectoryNames": ["Desktop", "Documents"]
+            },
+            "usbStorageControl": {
+                "mode": "enforce",
+                "blockExternalStorage": true
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let policy = try VeloxPolicy.decodeStrict(from: data)
+        XCTAssertEqual(policy.policyVersion, 22)
+        XCTAssertEqual(policy.usbStorageControl.mode, .enforce)
+        XCTAssertTrue(policy.usbStorageControl.blockExternalStorage)
     }
 }
 

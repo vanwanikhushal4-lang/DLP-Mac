@@ -23,6 +23,12 @@ final class ExtensionControlClient: @unchecked Sendable {
         }
     }
 
+    func setUSBStorageMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setUSBStorageMode(mode, withReply: completion)
+        }
+    }
+
     func recordBrowserUploadAttempt(_ payloadJSON: String, completion: @escaping (String) -> Void) {
         withProxy(completion: completion) { proxy in
             proxy.recordBrowserUploadAttempt(payloadJSON, withReply: completion)
