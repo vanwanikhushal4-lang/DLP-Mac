@@ -129,6 +129,13 @@ final class PasteboardMonitor {
             lastChangeCount = pasteboard.changeCount
 
             logger.warning("Blocked clipboard file transfer of \(blockedNames) to \(bundleId)")
+
+            VeloxNotificationManager.shared.postBlockedNotification(
+                module: "web-upload-control",
+                action: "clipboard-paste",
+                target: blockedNames.joined(separator: ", "),
+                detail: bundleId
+            )
         } else {
             // Audit-only mode: record event but don't clear
             lastChangeCount = currentChangeCount

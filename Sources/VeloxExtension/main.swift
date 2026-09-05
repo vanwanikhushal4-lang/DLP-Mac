@@ -23,12 +23,16 @@ let esService = EndpointSecurityService(
     logger: eventLogger
 )
 
-// Secure control channel used by the signed host application's React console.
 let controlService = VeloxControlService(
     policyManager: policyManager,
     logPath: logPath,
     eventLogger: eventLogger
 )
+
+esService.onEventBlocked = { [weak controlService] event in
+    controlService?.broadcastBlockedEvent(event)
+}
+
 let controlListenerDelegate = VeloxControlListenerDelegate(service: controlService)
 let controlListener = NSXPCListener(machServiceName: VeloxControlConstants.machServiceName)
 controlListener.delegate = controlListenerDelegate

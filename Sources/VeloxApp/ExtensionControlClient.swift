@@ -86,6 +86,8 @@ final class ExtensionControlClient: @unchecked Sendable {
             options: .privileged
         )
         newConnection.remoteObjectInterface = NSXPCInterface(with: VeloxControlProtocol.self)
+        newConnection.exportedInterface = NSXPCInterface(with: VeloxClientProtocol.self)
+        newConnection.exportedObject = VeloxNotificationManager.shared
         newConnection.invalidationHandler = { [weak self] in self?.invalidateConnection() }
         newConnection.interruptionHandler = { [weak self] in self?.invalidateConnection() }
         newConnection.resume()

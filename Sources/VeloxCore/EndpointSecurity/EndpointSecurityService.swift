@@ -46,6 +46,27 @@ public final class EndpointSecurityService: @unchecked Sendable {
     private var totalDeadlineMisses: UInt64 = 0
     private var lastError: String? = nil
     private var startTimeString: String = ""
+    private var eventBlockedHandler: (@Sendable (ExecutionEvent) -> Void)?
+
+    public var onEventBlocked: (@Sendable (ExecutionEvent) -> Void)? {
+        get {
+            os_unfair_lock_lock(stateLock)
+            defer { os_unfair_lock_unlock(stateLock) }
+            return eventBlockedHandler
+        }
+        set {
+            os_unfair_lock_lock(stateLock)
+            eventBlockedHandler = newValue
+            os_unfair_lock_unlock(stateLock)
+        }
+    }
+
+    private func notifyBlockedIfHandlerPresent(_ event: ExecutionEvent) {
+        os_unfair_lock_lock(stateLock)
+        let handler = eventBlockedHandler
+        os_unfair_lock_unlock(stateLock)
+        handler?(event)
+    }
 
     public init(
         policyEngine: PolicyEngine,
@@ -234,6 +255,9 @@ public final class EndpointSecurityService: @unchecked Sendable {
                 authResponseResult: responseStatus
             )
             logger.logEventAsync(event)
+            if decision.decisionString == "blocked" {
+                notifyBlockedIfHandlerPresent(event)
+            }
         } else if msg.event_type == ES_EVENT_TYPE_AUTH_OPEN {
             handleOpenMessage(
                 client: client,
@@ -305,27 +329,29 @@ public final class EndpointSecurityService: @unchecked Sendable {
 
         let endNs = DispatchTime.now().uptimeNanoseconds
         let latencyMicros = max(1, UInt64((endNs - startNs) / 1_000))
-        logger.logEventAsync(
-            ExecutionEvent(
-                timestamp: nil,
-                eventId: UUID().uuidString,
-                module: "web-upload-control",
-                action: "browser-file-open",
-                decision: decision.decisionString,
-                ruleId: decision.matchingRuleId,
-                policyVersion: decision.policyVersion,
-                executablePath: process.executablePath,
-                signingId: process.signingId,
-                teamId: process.teamId,
-                pid: process.pid,
-                parentPid: process.parentPid,
-                uid: process.uid,
-                decisionLatencyMicros: latencyMicros,
-                authResponseResult: responseStatus,
-                resourcePath: filePath,
-                requestedOpenFlags: requestedFlags
-            )
+        let event = ExecutionEvent(
+            timestamp: nil,
+            eventId: UUID().uuidString,
+            module: "web-upload-control",
+            action: "browser-file-open",
+            decision: decision.decisionString,
+            ruleId: decision.matchingRuleId,
+            policyVersion: decision.policyVersion,
+            executablePath: process.executablePath,
+            signingId: process.signingId,
+            teamId: process.teamId,
+            pid: process.pid,
+            parentPid: process.parentPid,
+            uid: process.uid,
+            decisionLatencyMicros: latencyMicros,
+            authResponseResult: responseStatus,
+            resourcePath: filePath,
+            requestedOpenFlags: requestedFlags
         )
+        logger.logEventAsync(event)
+        if decision.decisionString == "blocked" {
+            notifyBlockedIfHandlerPresent(event)
+        }
     }
 
     private func handleMountMessage(
@@ -369,29 +395,31 @@ public final class EndpointSecurityService: @unchecked Sendable {
         let responseStatus = response == ES_RESPOND_RESULT_SUCCESS ? "success" : "failed_code_\(response.rawValue)"
 
         guard decision.isUSBMountCandidate else { return }
-
+ 
         let endNs = DispatchTime.now().uptimeNanoseconds
         let latencyMicros = max(1, UInt64((endNs - startNs) / 1_000))
-        logger.logEventAsync(
-            ExecutionEvent(
-                timestamp: nil,
-                eventId: UUID().uuidString,
-                module: "usb-storage-control",
-                action: "mount",
-                decision: decision.decisionString,
-                ruleId: decision.matchingRuleId,
-                policyVersion: decision.policyVersion,
-                executablePath: process.executablePath,
-                signingId: process.signingId,
-                teamId: process.teamId,
-                pid: process.pid,
-                parentPid: process.parentPid,
-                uid: process.uid,
-                decisionLatencyMicros: latencyMicros,
-                authResponseResult: responseStatus,
-                resourcePath: "\(mountFrom) -> \(mountPoint) (\(fsType))"
-            )
+        let event = ExecutionEvent(
+            timestamp: nil,
+            eventId: UUID().uuidString,
+            module: "usb-storage-control",
+            action: "mount",
+            decision: decision.decisionString,
+            ruleId: decision.matchingRuleId,
+            policyVersion: decision.policyVersion,
+            executablePath: process.executablePath,
+            signingId: process.signingId,
+            teamId: process.teamId,
+            pid: process.pid,
+            parentPid: process.parentPid,
+            uid: process.uid,
+            decisionLatencyMicros: latencyMicros,
+            authResponseResult: responseStatus,
+            resourcePath: "\(mountFrom) -> \(mountPoint) (\(fsType))"
         )
+        logger.logEventAsync(event)
+        if decision.decisionString == "blocked" {
+            notifyBlockedIfHandlerPresent(event)
+        }
     }
 
     private func handleRemountMessage(
@@ -438,26 +466,28 @@ public final class EndpointSecurityService: @unchecked Sendable {
 
         let endNs = DispatchTime.now().uptimeNanoseconds
         let latencyMicros = max(1, UInt64((endNs - startNs) / 1_000))
-        logger.logEventAsync(
-            ExecutionEvent(
-                timestamp: nil,
-                eventId: UUID().uuidString,
-                module: "usb-storage-control",
-                action: "remount",
-                decision: decision.decisionString,
-                ruleId: decision.matchingRuleId,
-                policyVersion: decision.policyVersion,
-                executablePath: process.executablePath,
-                signingId: process.signingId,
-                teamId: process.teamId,
-                pid: process.pid,
-                parentPid: process.parentPid,
-                uid: process.uid,
-                decisionLatencyMicros: latencyMicros,
-                authResponseResult: responseStatus,
-                resourcePath: "\(mountFrom) -> \(mountPoint) (\(fsType))"
-            )
+        let remountExecutionEvent = ExecutionEvent(
+            timestamp: nil,
+            eventId: UUID().uuidString,
+            module: "usb-storage-control",
+            action: "remount",
+            decision: decision.decisionString,
+            ruleId: decision.matchingRuleId,
+            policyVersion: decision.policyVersion,
+            executablePath: process.executablePath,
+            signingId: process.signingId,
+            teamId: process.teamId,
+            pid: process.pid,
+            parentPid: process.parentPid,
+            uid: process.uid,
+            decisionLatencyMicros: latencyMicros,
+            authResponseResult: responseStatus,
+            resourcePath: "\(mountFrom) -> \(mountPoint) (\(fsType))"
         )
+        logger.logEventAsync(remountExecutionEvent)
+        if decision.decisionString == "blocked" {
+            notifyBlockedIfHandlerPresent(remountExecutionEvent)
+        }
     }
 
     private func handleUnmountMessage(

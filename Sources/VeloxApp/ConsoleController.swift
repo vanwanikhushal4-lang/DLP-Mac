@@ -2,15 +2,28 @@ import AppKit
 import Foundation
 @preconcurrency import SafariServices
 import WebKit
+import VeloxCore
 
 @MainActor
 final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NSWindowDelegate {
+    public static weak var current: ConsoleController?
+
     private let controlClient = ExtensionControlClient()
     private var schemeHandler: BundledWebSchemeHandler?
     private var window: NSWindow?
     private var webView: WKWebView?
 
+    func broadcastLiveEvent(_ event: ExecutionEvent) {
+        guard let data = try? JSONEncoder().encode(event),
+              let json = String(data: data, encoding: .utf8),
+              let webView else { return }
+        webView.evaluateJavaScript(
+            "window.veloxOnLiveEvent && window.veloxOnLiveEvent(\(json));"
+        )
+    }
+
     func show() {
+        Self.current = self
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)

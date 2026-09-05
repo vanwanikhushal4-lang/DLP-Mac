@@ -104,6 +104,8 @@ targets:
       - path: Sources/VeloxApp/ExtensionControlClient.swift
       - path: Sources/VeloxApp/InstalledApplicationScanner.swift
       - path: Sources/VeloxApp/PasteboardMonitor.swift
+      - path: Sources/VeloxApp/VeloxNotificationManager.swift
+      - path: Sources/VeloxApp/VeloxActiveEventMonitor.swift
       - path: Web/dist
         type: folder
         buildPhase: resources
@@ -113,6 +115,8 @@ targets:
         CFBundleShortVersionString: "1.3.0"
         CFBundleVersion: "8"
         LSUIElement: true
+        SBAppUsesLocalNotifications: true
+        NSUserNotificationAlertStyle: alert
         NSSystemExtensionUsageDescription: Velox Mac DLP installs an Endpoint Security system extension to enforce application-control policy.
     entitlements:
       path: Sources/VeloxApp/VeloxMacDLP.entitlements

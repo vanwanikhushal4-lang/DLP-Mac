@@ -18,12 +18,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
     private var consoleController: ConsoleController?
     private var statusItem: NSStatusItem?
     private var pasteboardMonitor: PasteboardMonitor?
+    private var activeEventMonitor: VeloxActiveEventMonitor?
 
     @MainActor
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Headless confirmation: Ensure dock tile is hidden
         NSApp.setActivationPolicy(.accessory)
         configureMenuBar()
+        VeloxNotificationManager.shared.requestAuthorization()
 
         logger.info("Velox Mac DLP Headless Host starting...")
 
@@ -41,6 +43,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
             let monitor = PasteboardMonitor(controlClient: ExtensionControlClient())
             self.pasteboardMonitor = monitor
             monitor.start()
+
+            let activeMonitor = VeloxActiveEventMonitor()
+            self.activeEventMonitor = activeMonitor
+            activeMonitor.start()
 
             if args.contains("--safari-settings") {
                 openSafariExtensionSettings()

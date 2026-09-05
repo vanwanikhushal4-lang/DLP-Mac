@@ -42,6 +42,18 @@ import Foundation
     )
 }
 
+/// Client-side callback interface implemented by the host application (VeloxApp)
+/// to receive real-time notifications of blocked events from the Endpoint Security extension.
+@objc public protocol VeloxClientProtocol {
+    func handleBlockedEvent(
+        module: String,
+        action: String,
+        target: String,
+        detail: String,
+        timestamp: Double
+    )
+}
+
 public enum VeloxControlConstants {
     public static let machServiceName = "L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc"
     public static let hostBundleIdentifier = "co.velox.macdlp"

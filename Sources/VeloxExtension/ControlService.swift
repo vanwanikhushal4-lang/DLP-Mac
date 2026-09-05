@@ -108,17 +108,31 @@ final class VeloxControlListenerDelegate: NSObject, NSXPCListenerDelegate {
         guard validator.isAuthorized(connection) else { return false }
         connection.exportedInterface = NSXPCInterface(with: VeloxControlProtocol.self)
         connection.exportedObject = service
+        connection.remoteObjectInterface = NSXPCInterface(with: VeloxClientProtocol.self)
+        service.addClient(connection)
+        connection.invalidationHandler = { [weak service, weak connection] in
+            if let connection {
+                service?.removeClient(connection)
+            }
+        }
+        connection.interruptionHandler = { [weak service, weak connection] in
+            if let connection {
+                service?.removeClient(connection)
+            }
+        }
         connection.resume()
         return true
     }
 }
 
-final class VeloxControlService: NSObject, VeloxControlProtocol {
+final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Sendable {
     private let policyManager: PolicyManager
     private let healthPath: String
     private let logPath: String
     private let eventLogger: EventLogger
     private let mutationLock = NSLock()
+    private let clientsLock = NSLock()
+    private var connectedClients: [NSXPCConnection] = []
     private let logger = Logger(subsystem: "co.velox.macdlp.endpointsecurity", category: "ControlService")
 
     init(
@@ -131,6 +145,42 @@ final class VeloxControlService: NSObject, VeloxControlProtocol {
         self.healthPath = healthPath
         self.logPath = logPath
         self.eventLogger = eventLogger ?? EventLogger(logFilePath: logPath)
+    }
+
+    func addClient(_ connection: NSXPCConnection) {
+        clientsLock.lock()
+        connectedClients.append(connection)
+        clientsLock.unlock()
+    }
+
+    func removeClient(_ connection: NSXPCConnection) {
+        clientsLock.lock()
+        connectedClients.removeAll { $0 === connection }
+        clientsLock.unlock()
+    }
+
+    func broadcastBlockedEvent(_ event: ExecutionEvent) {
+        clientsLock.lock()
+        let clients = connectedClients
+        clientsLock.unlock()
+
+        let module = event.module
+        let action = event.action
+        let target = event.resourcePath ?? event.executablePath
+        let detail = event.signingId ?? event.teamId ?? ""
+        let timestamp = Date().timeIntervalSince1970
+
+        for client in clients {
+            if let proxy = client.remoteObjectProxyWithErrorHandler({ _ in }) as? VeloxClientProtocol {
+                proxy.handleBlockedEvent(
+                    module: module,
+                    action: action,
+                    target: target,
+                    detail: detail,
+                    timestamp: timestamp
+                )
+            }
+        }
     }
 
     func getSnapshot(withReply reply: @escaping (String) -> Void) {
@@ -232,26 +282,28 @@ final class VeloxControlService: NSObject, VeloxControlProtocol {
         }
 
         let pageURL = String(attempt.pageURL.prefix(2_048))
-        eventLogger.logEventSync(
-            ExecutionEvent(
-                module: "web-upload-control",
-                action: "browser-upload-attempt",
-                decision: decision,
-                ruleId: "browser-extension-upload-guard",
-                policyVersion: policy.policyVersion,
-                executablePath: "Safari",
-                signingId: VeloxControlConstants.safariUploadGuardBundleIdentifier,
-                teamId: VeloxControlConstants.teamIdentifier,
-                pid: 0,
-                parentPid: 0,
-                uid: 0,
-                decisionLatencyMicros: 1,
-                authResponseResult: "browser-boundary",
-                resourcePath: fileNames.joined(separator: ", "),
-                pageURL: pageURL,
-                interaction: attempt.interaction
-            )
+        let event = ExecutionEvent(
+            module: "web-upload-control",
+            action: "browser-upload-attempt",
+            decision: decision,
+            ruleId: "browser-extension-upload-guard",
+            policyVersion: policy.policyVersion,
+            executablePath: "Safari",
+            signingId: VeloxControlConstants.safariUploadGuardBundleIdentifier,
+            teamId: VeloxControlConstants.teamIdentifier,
+            pid: 0,
+            parentPid: 0,
+            uid: 0,
+            decisionLatencyMicros: 1,
+            authResponseResult: "browser-boundary",
+            resourcePath: fileNames.joined(separator: ", "),
+            pageURL: pageURL,
+            interaction: attempt.interaction
         )
+        eventLogger.logEventSync(event)
+        if decision == "blocked" {
+            broadcastBlockedEvent(event)
+        }
         reply(#"{"ok":true}"#)
     }
 

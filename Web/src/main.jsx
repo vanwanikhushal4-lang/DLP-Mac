@@ -123,6 +123,39 @@ function App() {
   const [busyUSBStorage, setBusyUSBStorage] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [liveBlockedNotice, setLiveBlockedNotice] = useState(null);
+
+  useEffect(() => {
+    window.veloxOnLiveEvent = (event) => {
+      setEvents(prev => {
+        if (event.eventId && prev.some(e => e.eventId === event.eventId)) return prev;
+        return [event, ...prev.slice(0, 49)];
+      });
+      if (event.decision === "blocked") {
+        let label = event.executablePath?.split("/").pop() || event.signingId || "Resource";
+        if (event.module === "web-upload-control" || event.module === "clipboard-control") {
+          label = event.resourcePath?.split("/").pop() || "Protected File";
+        } else if (event.module === "usb-storage-control") {
+          label = event.resourcePath || "USB Device";
+        }
+        setLiveBlockedNotice({
+          id: event.eventId || Date.now(),
+          module: event.module,
+          label: label,
+          action: event.action
+        });
+      }
+    };
+    return () => {
+      window.veloxOnLiveEvent = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!liveBlockedNotice) return;
+    const t = setTimeout(() => setLiveBlockedNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [liveBlockedNotice]);
 
   const refreshSnapshot = useCallback(async () => {
     try {
@@ -290,6 +323,19 @@ function App() {
 
         {error && <div className="banner error"><strong>Control service unavailable</strong><span>{error}</span></div>}
         {notice && <div className="banner success"><strong>Policy activated</strong><span>{notice}</span></div>}
+        {liveBlockedNotice && (
+          <div className="banner error live-blocked-banner" role="alert" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: "4px solid #ff4d5e", background: "rgba(255, 77, 94, 0.15)", marginBottom: "16px" }}>
+            <div>
+              <strong style={{ color: "#ff4d5e" }}>⛔ BLOCKED BY VELOX DLP</strong>
+              <span style={{ marginLeft: "8px" }}>'{liveBlockedNotice.label}' was blocked by security policy.</span>
+            </div>
+            <button
+              onClick={() => setLiveBlockedNotice(null)}
+              style={{ background: "none", border: "none", color: "#8b949e", cursor: "pointer", fontSize: "16px", padding: "0 8px" }}
+              aria-label="Dismiss alert"
+            >✕</button>
+          </div>
+        )}
 
         {activeFeature === "applications" && <>
           <section className="summary-grid">

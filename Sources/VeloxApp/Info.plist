@@ -20,6 +20,10 @@
 	<string>8</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>SBAppUsesLocalNotifications</key>
+	<true/>
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
 	<key>NSSystemExtensionUsageDescription</key>
 	<string>Velox Mac DLP installs an Endpoint Security system extension to enforce application-control policy.</string>
 </dict>
