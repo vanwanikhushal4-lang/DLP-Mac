@@ -431,5 +431,97 @@ final class PolicyEngineTests: XCTestCase {
         XCTAssertTrue(dsStoreDecision.shouldAllowOpen, ".DS_Store must be allowed to open")
         XCTAssertFalse(dsStoreDecision.isUploadCandidate, ".DS_Store must not be treated as upload candidate")
     }
+
+    func testWebUploadEnforcementBlocksReadWithCloexecFlag() {
+        let policy = VeloxPolicy(
+            policyVersion: 13,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let webContent = ProcessContext(
+            pid: 407, parentPid: 1, uid: 501,
+            signingId: "com.apple.WebKit.WebContent", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent"
+        )
+
+        // 16777217 = FREAD (1) | O_CLOEXEC (0x01000000)
+        let decision = engine.evaluateWebUploadOpen(
+            process: webContent,
+            filePath: "/Users/alice/Desktop/confidential.docx",
+            requestedFlags: 16_777_217,
+            isRegularFile: true
+        )
+
+        XCTAssertFalse(decision.shouldAllowOpen, "Read with O_CLOEXEC must be blocked in enforce mode")
+        XCTAssertTrue(decision.isUploadCandidate)
+        XCTAssertEqual(decision.decisionString, "blocked")
+    }
+
+    func testClipboardEvaluationBlocksProtectedFiles() {
+        let policy = VeloxPolicy(
+            policyVersion: 14,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+
+        let files = [
+            "/Users/alice/Desktop/secret.pdf",
+            "/Users/alice/Documents/financials.xlsx",
+            "/tmp/scratch.txt"
+        ]
+
+        let decision = engine.evaluateClipboardContent(filePaths: files)
+        XCTAssertTrue(decision.shouldBlock)
+        XCTAssertEqual(decision.decisionString, "blocked")
+        XCTAssertEqual(decision.blockedPaths.count, 2)
+        XCTAssertTrue(decision.blockedPaths.contains("/Users/alice/Desktop/secret.pdf"))
+        XCTAssertTrue(decision.blockedPaths.contains("/Users/alice/Documents/financials.xlsx"))
+        XCTAssertEqual(decision.matchingRuleId, "clipboard-file-transfer")
+    }
+
+    func testClipboardEvaluationAuditOnly() {
+        let policy = VeloxPolicy(
+            policyVersion: 15,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .auditOnly)
+        )
+        let engine = PolicyEngine(policy: policy)
+
+        let decision = engine.evaluateClipboardContent(filePaths: ["/Users/alice/Downloads/export.csv"])
+        XCTAssertFalse(decision.shouldBlock, "Audit-only must not block clipboard")
+        XCTAssertEqual(decision.decisionString, "would-block")
+        XCTAssertEqual(decision.blockedPaths.count, 1)
+    }
+
+    func testClipboardEvaluationAllowsUnprotectedFiles() {
+        let policy = VeloxPolicy(
+            policyVersion: 16,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+
+        let decision = engine.evaluateClipboardContent(filePaths: ["/tmp/test.txt", "/Applications/Calculator.app"])
+        XCTAssertFalse(decision.shouldBlock)
+        XCTAssertEqual(decision.decisionString, "allowed")
+        XCTAssertTrue(decision.blockedPaths.isEmpty)
+    }
+
+    func testClipboardEvaluationDisabledMode() {
+        let policy = VeloxPolicy(
+            policyVersion: 17,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .disabled)
+        )
+        let engine = PolicyEngine(policy: policy)
+
+        let decision = engine.evaluateClipboardContent(filePaths: ["/Users/alice/Desktop/secret.pdf"])
+        XCTAssertFalse(decision.shouldBlock)
+        XCTAssertEqual(decision.decisionString, "allowed")
+    }
 }
+
 

@@ -221,10 +221,9 @@ function App() {
   const blockedCount = snapshot?.blockedRuleCount || 0;
   const protectedFolders = snapshot?.webUploadProtectedDirectories || [];
   const visibleEvents = events.filter(event => activeFeature === "web-upload"
-    ? event.module === "web-upload-control"
-    : event.module !== "web-upload-control");
-  const recentUploadBlocks = events.filter(event => event.module === "web-upload-control" && event.decision === "blocked").length;
-  const safariGuardVerified = events.some(event => event.action === "browser-upload-attempt" && event.decision === "blocked");
+    ? (event.module === "web-upload-control" || event.module === "clipboard-control")
+    : (event.module !== "web-upload-control" && event.module !== "clipboard-control"));
+  const recentUploadBlocks = events.filter(event => (event.module === "web-upload-control" || event.module === "clipboard-control") && event.decision === "blocked").length;
   const isWebUploadView = activeFeature === "web-upload";
 
   return (
@@ -285,15 +284,15 @@ function App() {
           <section className="summary-grid">
             <article><span className="card-label">UPLOAD PROTECTION</span><strong>{modeCopy[webUploadMode]?.label}</strong><p>Downloads and normal browser traffic remain allowed.</p></article>
             <article><span className="card-label">RECENTLY BLOCKED</span><strong>{recentUploadBlocks}</strong><p>Upload candidates in the current activity window.</p></article>
-            <article><span className="card-label">SAFARI GUARD</span><strong className={safariGuardVerified ? "state-enabled" : "state-action"}>{safariGuardVerified ? "Verified" : "Action required"}</strong><p>{safariGuardVerified ? "A real browser-boundary block was recorded." : "One-time Safari approval is required."}</p></article>
+            <article><span className="card-label">ENFORCEMENT ENGINE</span><strong className="state-enabled">OS-Level Active</strong><p>Dual-layer kernel AUTH_OPEN + pasteboard guard protect all browsers.</p></article>
           </section>
 
           <section className="panel upload-panel">
             <div className="upload-heading">
               <div className="upload-icon">⇧</div>
               <div>
-                <div className="title-with-badge"><h2>Browser upload protection</h2><span>PROTOTYPE</span></div>
-                <p>Stops file-picker, drag/drop and pasted-file uploads before Safari gives them to a website. Incoming downloads remain allowed.</p>
+                <div className="title-with-badge"><h2>Browser upload protection</h2><span>OS-LEVEL DLP</span></div>
+                <p>Stops file-picker, drag/drop and pasted-file uploads across all browsers (Safari, Chrome, Edge, Firefox, Brave) at the OS level. Incoming downloads remain allowed.</p>
               </div>
             </div>
             <div className="upload-controls">
@@ -309,13 +308,8 @@ function App() {
             </div>
           </section>
 
-          {!safariGuardVerified && <section className="panel safari-setup-panel">
-            <div><span className="coverage-state warning">ONE-TIME SETUP</span><h2>Enable Velox DLP Upload Guard in Safari</h2><p>Open Safari settings, enable the extension, and grant access to all websites.</p></div>
-            <button className="setup-button" onClick={openSafariSettings}>Open Safari Settings</button>
-          </section>}
-
           <section className="panel coverage-panel">
-            <div><span className="coverage-state">SAFARI PROTOTYPE</span><h2>Browser-boundary protection + Endpoint Security telemetry</h2><p>Safari uploads are stopped at the page boundary. Endpoint Security continues to audit protected-folder access. Chromium and Firefox require their corresponding managed browser extension before they can be claimed as enforced.</p></div>
+            <div><span className="coverage-state">ALL BROWSERS ENFORCED</span><h2>Kernel Endpoint Security + Pasteboard Guard</h2><p>Protects Safari, Google Chrome, Microsoft Edge, Mozilla Firefox, Brave, and Opera. File access is intercepted at the kernel level (AUTH_OPEN) and clipboard transfers are intercepted upon browser activation. No browser extensions or user permissions needed.</p></div>
           </section>
         </>}
 

@@ -170,16 +170,15 @@ public final class PolicyEngine: @unchecked Sendable {
         let mode = policy.webUploadControl.mode
         let readRequested = (requestedFlags & UInt32(FREAD)) != 0
         let writeRequested = (requestedFlags & UInt32(FWRITE)) != 0
-        let isPlainRead = requestedFlags == UInt32(FREAD)
+        let isEventOnly = (requestedFlags & UInt32(O_EVTONLY)) != 0
+        let isReadOnlyData = readRequested && !writeRequested && !isEventOnly
         let isPartialDownload = Self.isBrowserPartialDownloadPath(filePath)
         let isBundleComponent = Self.isApplicationOrBundlePath(filePath)
         let isMetadata = Self.isSystemMetadataPath(filePath)
 
         guard mode != .disabled,
               isRegularFile,
-              readRequested,
-              !writeRequested,
-              isPlainRead,
+              isReadOnlyData,
               !isPartialDownload,
               !isBundleComponent,
               !isMetadata,
@@ -225,19 +224,89 @@ public final class PolicyEngine: @unchecked Sendable {
         }
     }
 
-    private static func isSupportedBrowser(_ process: ProcessContext) -> Bool {
-        let signingId = process.signingId?.lowercased() ?? ""
-        let signingPrefixes = [
+    /// Evaluates clipboard content file references against protected directories.
+    public func evaluateClipboardContent(filePaths: [String]) -> ClipboardDecision {
+        os_unfair_lock_lock(lock)
+        let policy = self.activePolicy
+        os_unfair_lock_unlock(lock)
+
+        let version = policy.policyVersion
+        let mode = policy.webUploadControl.mode
+
+        guard mode != .disabled else {
+            return ClipboardDecision(
+                decisionString: "allowed",
+                shouldBlock: false,
+                blockedPaths: [],
+                matchingRuleId: nil,
+                policyVersion: version
+            )
+        }
+
+        let protected = filePaths.filter { path in
+            Self.isProtectedUserContentPath(
+                path,
+                directoryNames: policy.webUploadControl.protectedDirectoryNames
+            )
+        }
+
+        guard !protected.isEmpty else {
+            return ClipboardDecision(
+                decisionString: "allowed",
+                shouldBlock: false,
+                blockedPaths: [],
+                matchingRuleId: nil,
+                policyVersion: version
+            )
+        }
+
+        switch mode {
+        case .enforce:
+            return ClipboardDecision(
+                decisionString: "blocked",
+                shouldBlock: true,
+                blockedPaths: protected,
+                matchingRuleId: "clipboard-file-transfer",
+                policyVersion: version
+            )
+        case .auditOnly:
+            return ClipboardDecision(
+                decisionString: "would-block",
+                shouldBlock: false,
+                blockedPaths: protected,
+                matchingRuleId: "clipboard-file-transfer",
+                policyVersion: version
+            )
+        case .disabled:
+            return ClipboardDecision(
+                decisionString: "allowed",
+                shouldBlock: false,
+                blockedPaths: [],
+                matchingRuleId: nil,
+                policyVersion: version
+            )
+        }
+    }
+
+    public static func isSupportedBrowserBundleId(_ bundleId: String) -> Bool {
+        let lower = bundleId.lowercased()
+        let prefixes = [
             "com.apple.safari",
             "com.apple.webkit.webcontent",
             "com.apple.webkit.networking",
             "com.google.chrome",
             "com.microsoft.edgemac",
             "com.brave.browser",
-            "org.mozilla.firefox"
+            "org.mozilla.firefox",
+            "com.operasoftware.opera",
+            "company.thebrowser.browser"
         ]
+        return prefixes.contains(where: { lower == $0 || lower.hasPrefix($0 + ".") })
+    }
 
-        if signingPrefixes.contains(where: { signingId == $0 || signingId.hasPrefix($0 + ".") }) {
+    private static func isSupportedBrowser(_ process: ProcessContext) -> Bool {
+        let signingId = process.signingId?.lowercased() ?? ""
+        if isSupportedBrowserBundleId(signingId) {
             return true
         }
 
@@ -247,16 +316,18 @@ public final class PolicyEngine: @unchecked Sendable {
             "/google chrome.app/",
             "/microsoft edge.app/",
             "/brave browser.app/",
-            "/firefox.app/"
+            "/firefox.app/",
+            "/opera.app/",
+            "/arc.app/"
         ]
         return appPathMarkers.contains(where: executablePath.contains)
     }
 
-    private static func isProtectedUserContentPath(
+    public static func isProtectedUserContentPath(
         _ filePath: String,
         directoryNames: [String]
     ) -> Bool {
-        let components = URL(fileURLWithPath: filePath).standardizedFileURL.pathComponents
+        let components = URL(fileURLWithPath: filePath).resolvingSymlinksInPath().standardizedFileURL.pathComponents
         guard components.count >= 5,
               components[0] == "/",
               components[1] == "Users",

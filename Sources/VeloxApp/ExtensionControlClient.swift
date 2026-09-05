@@ -23,6 +23,12 @@ final class ExtensionControlClient: @unchecked Sendable {
         }
     }
 
+    func recordBrowserUploadAttempt(_ payloadJSON: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.recordBrowserUploadAttempt(payloadJSON, withReply: completion)
+        }
+    }
+
     func setApplicationBlocked(
         signingId: String,
         executablePath: String,

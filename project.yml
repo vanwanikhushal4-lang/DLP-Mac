@@ -103,6 +103,7 @@ targets:
       - path: Sources/VeloxApp/ConsoleController.swift
       - path: Sources/VeloxApp/ExtensionControlClient.swift
       - path: Sources/VeloxApp/InstalledApplicationScanner.swift
+      - path: Sources/VeloxApp/PasteboardMonitor.swift
       - path: Web/dist
         type: folder
         buildPhase: resources

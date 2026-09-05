@@ -17,6 +17,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
     private let logger = Logger(subsystem: "co.velox.macdlp", category: "HostApp")
     private var consoleController: ConsoleController?
     private var statusItem: NSStatusItem?
+    private var pasteboardMonitor: PasteboardMonitor?
 
     @MainActor
     public func applicationDidFinishLaunching(_ notification: Notification) {
@@ -36,6 +37,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
             let consoleController = ConsoleController()
             self.consoleController = consoleController
             consoleController.show()
+
+            let monitor = PasteboardMonitor(controlClient: ExtensionControlClient())
+            self.pasteboardMonitor = monitor
+            monitor.start()
+
             if args.contains("--safari-settings") {
                 openSafariExtensionSettings()
             }
@@ -73,13 +79,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
         let openItem = NSMenuItem(title: "Open Velox Console", action: #selector(openConsole), keyEquivalent: "o")
         openItem.target = self
         menu.addItem(openItem)
-        let safariItem = NSMenuItem(
-            title: "Open Safari Extension Settings",
-            action: #selector(openSafariExtensionSettings),
-            keyEquivalent: ""
-        )
-        safariItem.target = self
-        menu.addItem(safariItem)
         menu.addItem(.separator())
         let quitItem = NSMenuItem(title: "Quit Console", action: #selector(quitConsole), keyEquivalent: "q")
         quitItem.target = self
