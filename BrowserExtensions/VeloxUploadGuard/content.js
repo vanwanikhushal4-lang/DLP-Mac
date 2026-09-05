@@ -64,6 +64,40 @@
     globalThis.setTimeout(() => notice.remove(), 6000);
   }
 
+  function extractFilesFromDataTransfer(dt) {
+    if (!dt) return [];
+    const names = [];
+    if (dt.files && dt.files.length > 0) {
+      for (let i = 0; i < dt.files.length; i++) {
+        const file = dt.files[i];
+        if (file && file.name) names.push(file.name);
+        else if (file && file.type) names.push(file.type);
+      }
+    }
+    if (dt.items && dt.items.length > 0) {
+      for (let i = 0; i < dt.items.length; i++) {
+        const item = dt.items[i];
+        if (item.kind === "file") {
+          try {
+            const file = item.getAsFile?.();
+            if (file && file.name && !names.includes(file.name)) {
+              names.push(file.name);
+            } else if (file && file.type && !names.includes(file.type)) {
+              names.push(file.type);
+            } else if (names.length === 0) {
+              names.push(item.type || "pasted-file");
+            }
+          } catch (_) {
+            if (names.length === 0) names.push("file");
+          }
+        } else if (item.type.startsWith("image/") && names.length === 0) {
+          names.push(item.type);
+        }
+      }
+    }
+    return names;
+  }
+
   function handleAttempt(event, fileNames, interaction, clearSelection) {
     if (fileNames.length === 0 || policyMode === "disabled") return;
 
@@ -72,25 +106,55 @@
     if (!blocked) return;
 
     event.preventDefault();
+    event.stopPropagation();
     event.stopImmediatePropagation();
     clearSelection?.();
     showBlockedNotice(fileNames);
   }
 
+  // Intercept file chooser clicks before macOS file dialog opens
+  globalThis.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && target.type.toLowerCase() === "file" && policyMode === "enforce") {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      report(["file-picker-dialog"], "file-picker-click", true);
+      showBlockedNotice(["File uploads"]);
+    }
+  }, true);
+
+  // Intercept file picker changes
   globalThis.addEventListener("change", (event) => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement) || input.type.toLowerCase() !== "file") return;
-    const fileNames = Array.from(input.files ?? [], (file) => file.name);
-    handleAttempt(event, fileNames, "file-picker", () => { input.value = ""; });
+    const fileNames = Array.from(input.files ?? [], (file) => file.name || file.type || "file");
+    handleAttempt(event, fileNames, "file-picker", () => {
+      try { input.value = ""; } catch (_) {}
+    });
+  }, true);
+
+  // Intercept drag-and-drop file uploads
+  globalThis.addEventListener("dragover", (event) => {
+    if (policyMode === "enforce" && event.dataTransfer?.types?.includes("Files")) {
+      event.dataTransfer.dropEffect = "none";
+    }
   }, true);
 
   globalThis.addEventListener("drop", (event) => {
-    const fileNames = Array.from(event.dataTransfer?.files ?? [], (file) => file.name);
+    let fileNames = extractFilesFromDataTransfer(event.dataTransfer);
+    if (fileNames.length === 0 && event.dataTransfer?.types?.includes("Files")) {
+      fileNames = ["dragged-file"];
+    }
     handleAttempt(event, fileNames, "drag-drop");
   }, true);
 
+  // Intercept pasted files and clipboard screenshots
   globalThis.addEventListener("paste", (event) => {
-    const fileNames = Array.from(event.clipboardData?.files ?? [], (file) => file.name);
+    let fileNames = extractFilesFromDataTransfer(event.clipboardData);
+    if (fileNames.length === 0 && event.clipboardData?.types?.includes("Files")) {
+      fileNames = ["pasted-image"];
+    }
     handleAttempt(event, fileNames, "paste");
   }, true);
 
@@ -100,9 +164,13 @@
     const inputs = Array.from(form.querySelectorAll('input[type="file"]'));
     const fileNames = inputs.flatMap((input) => Array.from(input.files ?? [], (file) => file.name));
     handleAttempt(event, fileNames, "form-submit", () => {
-      inputs.forEach((input) => { input.value = ""; });
+      inputs.forEach((input) => { try { input.value = ""; } catch (_) {} });
     });
   }, true);
+
+  try {
+    console.log("[Velox DLP Upload Guard] Active on", globalThis.location?.host || "page");
+  } catch (_) {}
 
   refreshPolicy();
   globalThis.setInterval(refreshPolicy, 2000);
