@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Velox DLP Upload Guard",
+  "description": "Prevents protected file uploads when Velox Mac DLP web-upload enforcement is enabled.",
+  "version": "1.2.4",
+  "permissions": [
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}

@@ -2,6 +2,8 @@
 .build/
 build/
 DerivedData/
+.derived/
 xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
+Web/node_modules/

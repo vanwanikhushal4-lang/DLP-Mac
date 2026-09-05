@@ -7,25 +7,38 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		013D79010A61FCFA64D88368 /* SafariUploadGuardControlClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E6281042EA56E02C2E77C5C /* SafariUploadGuardControlClient.swift */; };
 		031AF3B7556CDE29AD555D1C /* PolicyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0B42A9DD8BC115FDE2AA6A /* PolicyManager.swift */; };
+		05FBE3C4CC47345F4E955468 /* ExtensionControlClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08CD7BEF1DC8E25506C7A63 /* ExtensionControlClient.swift */; };
 		07160851501CFA85F6B9BB9D /* EndpointSecurityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81B64AFAF9DDCBE97E80E5EC /* EndpointSecurityService.swift */; };
 		2D713E9C6FEDED1FF66546F7 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E848C9198C7BDCF17BF943E0 /* AppDelegate.swift */; };
 		2E9C26D4C691ADFD2C3326D9 /* PolicyEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4117DBC130D0A3621353698 /* PolicyEngineTests.swift */; };
+		317FC2D3CF2DDC1D65233EF1 /* ControlService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D188E5ECFB2A5166368BE0C3 /* ControlService.swift */; };
+		34CA9FBB775B00917A2B3D67 /* VeloxControlProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6BCD21227DF6C1714AA35DB /* VeloxControlProtocol.swift */; };
+		3B6AD40F8ABBBFB4B1A25001 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 40F66F3895B25267A205A8A6 /* content.js */; };
+		3BE50D23E7105248E5E72E6C /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 1DC3317C04068BC834979BBC /* manifest.json */; };
 		4C4670E42E506BD3C6B697A2 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9AF0561DB2E8BF7AC0EFC54 /* main.swift */; };
 		561F3DA5E9DDD6E8D5004005 /* FileSecurity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FEE5595D3E58E64956D34A /* FileSecurity.swift */; };
+		66E06A7C3CAC9F61F85B1DB5 /* dist in Resources */ = {isa = PBXBuildFile; fileRef = DDF89EA6F481543896EFCCED /* dist */; };
 		6E593BB721975922B813191E /* VeloxExtension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 528A941695824503AF88CEF7 /* VeloxExtension.systemextension */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		71B158FCAC601A18AC73FE4B /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE0733F6AE5BF22F317BECD1 /* SafariWebExtensionHandler.swift */; };
 		7D53196C3966701A36A148D5 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF46A124E99C346B960B335 /* main.swift */; };
 		7FF8AB80B6BCFBF3A807EEB0 /* EventLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8459957CCF679341C61B3D2C /* EventLogger.swift */; };
+		80ABB2C7F7B491AD084EDB9C /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 266D16FF787B8DEF8EDF9C43 /* background.js */; };
+		921147591CB5C2DE21D84FC2 /* BundledWebSchemeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58587F3DE67C667C45F46A7 /* BundledWebSchemeHandler.swift */; };
 		932CFBA95C3F752D573FC8A2 /* libVeloxCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82882244835FE33A8714983D /* libVeloxCore.a */; };
 		99343249A49421511AAF7834 /* libVeloxCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82882244835FE33A8714983D /* libVeloxCore.a */; };
+		995F5E73389458081F6AD060 /* ConsoleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C15D11AED23FA50D77313DF3 /* ConsoleController.swift */; };
 		9E19391BE6C90FD93C33A0DD /* PolicyModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECE0F4E4B48C74AF8C496E2E /* PolicyModel.swift */; };
 		AD63BC6D3D24AE03ED369E9F /* PolicyEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5237E6CF7500B33B4AB5F140 /* PolicyEngine.swift */; };
 		B56E8E4DE79C2610E7CFF742 /* PolicyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC11271361CC6422FC3471BA /* PolicyManagerTests.swift */; };
 		B9D72634EE601330AB924B67 /* EventLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D567B51591F3CFA2405621 /* EventLoggerTests.swift */; };
 		D5E90D876730FE2D32C483BF /* SecurityGuardianTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2950E1340C2F09426D65D40D /* SecurityGuardianTests.swift */; };
+		DA752384226B2256532D2F2D /* InstalledApplicationScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 934A79A96247E273D204D883 /* InstalledApplicationScanner.swift */; };
 		DC0893EE91F2C320157EE04A /* SecurityGuardian.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231CCD8D825D187ED70A36EC /* SecurityGuardian.swift */; };
 		EAD237DAAE2DF7EAD8E02815 /* libVeloxCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82882244835FE33A8714983D /* libVeloxCore.a */; };
 		F168C25071F87FA7EE01F690 /* ProcessContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FEE10A504ABC6F0D8877A06 /* ProcessContext.swift */; };
+		F5F7DF0A1EB8EE3B25DDD457 /* VeloxSafariUploadGuard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6509C6F0F8BF66069AFDB446 /* VeloxSafariUploadGuard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -42,6 +55,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = D5AC70188B70DF6A00259046;
 			remoteInfo = VeloxExtension;
+		};
+		8586224730B2CB5E6B6B7994 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5776E974B9C650680D4B7C64 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 29CEF0376F50FC04B4D2313C;
+			remoteInfo = VeloxSafariUploadGuard;
 		};
 		9A29EA1C8F9224BB28F1322A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -71,28 +91,52 @@
 			name = "Embed System Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C53A237C6EC0C69DCB6F207B /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				F5F7DF0A1EB8EE3B25DDD457 /* VeloxSafariUploadGuard.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0F0B42A9DD8BC115FDE2AA6A /* PolicyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyManager.swift; sourceTree = "<group>"; };
 		11D567B51591F3CFA2405621 /* EventLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLoggerTests.swift; sourceTree = "<group>"; };
+		1DC3317C04068BC834979BBC /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		231CCD8D825D187ED70A36EC /* SecurityGuardian.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityGuardian.swift; sourceTree = "<group>"; };
+		266D16FF787B8DEF8EDF9C43 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = background.js; sourceTree = "<group>"; };
 		2950E1340C2F09426D65D40D /* SecurityGuardianTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityGuardianTests.swift; sourceTree = "<group>"; };
+		3E6281042EA56E02C2E77C5C /* SafariUploadGuardControlClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariUploadGuardControlClient.swift; sourceTree = "<group>"; };
+		40F66F3895B25267A205A8A6 /* content.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = content.js; sourceTree = "<group>"; };
 		5237E6CF7500B33B4AB5F140 /* PolicyEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyEngine.swift; sourceTree = "<group>"; };
 		528A941695824503AF88CEF7 /* VeloxExtension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = VeloxExtension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		53E33542B0AB7A7D171F9828 /* VeloxCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VeloxCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6509C6F0F8BF66069AFDB446 /* VeloxSafariUploadGuard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VeloxSafariUploadGuard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E8F9FBDB615BC30D8B9F318 /* VeloxMacDLP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VeloxMacDLP.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7FEE10A504ABC6F0D8877A06 /* ProcessContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessContext.swift; sourceTree = "<group>"; };
 		81B64AFAF9DDCBE97E80E5EC /* EndpointSecurityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndpointSecurityService.swift; sourceTree = "<group>"; };
 		82882244835FE33A8714983D /* libVeloxCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libVeloxCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		8459957CCF679341C61B3D2C /* EventLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLogger.swift; sourceTree = "<group>"; };
+		934A79A96247E273D204D883 /* InstalledApplicationScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledApplicationScanner.swift; sourceTree = "<group>"; };
+		A58587F3DE67C667C45F46A7 /* BundledWebSchemeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledWebSchemeHandler.swift; sourceTree = "<group>"; };
 		A9AF0561DB2E8BF7AC0EFC54 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		AC11271361CC6422FC3471BA /* PolicyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyManagerTests.swift; sourceTree = "<group>"; };
 		B9FEE5595D3E58E64956D34A /* FileSecurity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSecurity.swift; sourceTree = "<group>"; };
 		BEF46A124E99C346B960B335 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		C08CD7BEF1DC8E25506C7A63 /* ExtensionControlClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionControlClient.swift; sourceTree = "<group>"; };
+		C15D11AED23FA50D77313DF3 /* ConsoleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleController.swift; sourceTree = "<group>"; };
 		C4117DBC130D0A3621353698 /* PolicyEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyEngineTests.swift; sourceTree = "<group>"; };
+		CE0733F6AE5BF22F317BECD1 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		D188E5ECFB2A5166368BE0C3 /* ControlService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlService.swift; sourceTree = "<group>"; };
+		DDF89EA6F481543896EFCCED /* dist */ = {isa = PBXFileReference; lastKnownFileType = folder; name = dist; path = Web/dist; sourceTree = SOURCE_ROOT; };
 		E848C9198C7BDCF17BF943E0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		ECE0F4E4B48C74AF8C496E2E /* PolicyModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyModel.swift; sourceTree = "<group>"; };
+		F6BCD21227DF6C1714AA35DB /* VeloxControlProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VeloxControlProtocol.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -150,13 +194,24 @@
 			path = EndpointSecurity;
 			sourceTree = "<group>";
 		};
+		1740CB9F777BE715E44AF61D /* Control */ = {
+			isa = PBXGroup;
+			children = (
+				F6BCD21227DF6C1714AA35DB /* VeloxControlProtocol.swift */,
+			);
+			path = Control;
+			sourceTree = "<group>";
+		};
 		344DAFDF3D2B7B8562BEB003 = {
 			isa = PBXGroup;
 			children = (
+				DDF89EA6F481543896EFCCED /* dist */,
 				7511E29F700D921C45019F82 /* VeloxApp */,
 				42FD3F452B8AEE71FDA48AE9 /* VeloxCore */,
 				DF252518CBE44A287C7E42DF /* VeloxCoreTests */,
 				C9A401257B30413129050DD2 /* VeloxExtension */,
+				4A853E112AC15C69EC82AB52 /* VeloxSafariUploadGuard */,
+				CBE517721FEFF290FBCAF9A9 /* VeloxUploadGuard */,
 				D1D3A0DEF21422006454418B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -164,6 +219,7 @@
 		42FD3F452B8AEE71FDA48AE9 /* VeloxCore */ = {
 			isa = PBXGroup;
 			children = (
+				1740CB9F777BE715E44AF61D /* Control */,
 				12F025A9477BC734C4C3C97A /* EndpointSecurity */,
 				08DD0C5F7FA01CF696FB820F /* Logging */,
 				05F5095A3B6FA39DAAB179F5 /* Policy */,
@@ -171,6 +227,16 @@
 			);
 			name = VeloxCore;
 			path = Sources/VeloxCore;
+			sourceTree = "<group>";
+		};
+		4A853E112AC15C69EC82AB52 /* VeloxSafariUploadGuard */ = {
+			isa = PBXGroup;
+			children = (
+				3E6281042EA56E02C2E77C5C /* SafariUploadGuardControlClient.swift */,
+				CE0733F6AE5BF22F317BECD1 /* SafariWebExtensionHandler.swift */,
+			);
+			name = VeloxSafariUploadGuard;
+			path = Sources/VeloxSafariUploadGuard;
 			sourceTree = "<group>";
 		};
 		5E09B1D20E68AC22E22F41A8 /* Security */ = {
@@ -186,6 +252,10 @@
 			isa = PBXGroup;
 			children = (
 				E848C9198C7BDCF17BF943E0 /* AppDelegate.swift */,
+				A58587F3DE67C667C45F46A7 /* BundledWebSchemeHandler.swift */,
+				C15D11AED23FA50D77313DF3 /* ConsoleController.swift */,
+				C08CD7BEF1DC8E25506C7A63 /* ExtensionControlClient.swift */,
+				934A79A96247E273D204D883 /* InstalledApplicationScanner.swift */,
 				BEF46A124E99C346B960B335 /* main.swift */,
 			);
 			name = VeloxApp;
@@ -195,10 +265,22 @@
 		C9A401257B30413129050DD2 /* VeloxExtension */ = {
 			isa = PBXGroup;
 			children = (
+				D188E5ECFB2A5166368BE0C3 /* ControlService.swift */,
 				A9AF0561DB2E8BF7AC0EFC54 /* main.swift */,
 			);
 			name = VeloxExtension;
 			path = Sources/VeloxExtension;
+			sourceTree = "<group>";
+		};
+		CBE517721FEFF290FBCAF9A9 /* VeloxUploadGuard */ = {
+			isa = PBXGroup;
+			children = (
+				266D16FF787B8DEF8EDF9C43 /* background.js */,
+				40F66F3895B25267A205A8A6 /* content.js */,
+				1DC3317C04068BC834979BBC /* manifest.json */,
+			);
+			name = VeloxUploadGuard;
+			path = BrowserExtensions/VeloxUploadGuard;
 			sourceTree = "<group>";
 		};
 		D1D3A0DEF21422006454418B /* Products */ = {
@@ -208,6 +290,7 @@
 				53E33542B0AB7A7D171F9828 /* VeloxCoreTests.xctest */,
 				528A941695824503AF88CEF7 /* VeloxExtension.systemextension */,
 				6E8F9FBDB615BC30D8B9F318 /* VeloxMacDLP.app */,
+				6509C6F0F8BF66069AFDB446 /* VeloxSafariUploadGuard.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -232,7 +315,9 @@
 			buildConfigurationList = 5C68622515AF1D1092338D52 /* Build configuration list for PBXNativeTarget "VeloxMacDLP" */;
 			buildPhases = (
 				BEB5B74EE94E620AA113B094 /* Sources */,
+				DA3DEF84388FED1EEC46ADF6 /* Resources */,
 				5BE4D83E1980B35328C77A0A /* Frameworks */,
+				C53A237C6EC0C69DCB6F207B /* Embed Foundation Extensions */,
 				5A24E7CDFBF4F76566325D92 /* Embed System Extensions */,
 			);
 			buildRules = (
@@ -240,6 +325,7 @@
 			dependencies = (
 				B8764DDCE4153C42313CBD82 /* PBXTargetDependency */,
 				025624955022D1B9617D9026 /* PBXTargetDependency */,
+				DB4CB8471364A090EC2FB6C5 /* PBXTargetDependency */,
 			);
 			name = VeloxMacDLP;
 			packageProductDependencies = (
@@ -247,6 +333,24 @@
 			productName = VeloxMacDLP;
 			productReference = 6E8F9FBDB615BC30D8B9F318 /* VeloxMacDLP.app */;
 			productType = "com.apple.product-type.application";
+		};
+		29CEF0376F50FC04B4D2313C /* VeloxSafariUploadGuard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5EAB6BB725C1B035F2EB9D7B /* Build configuration list for PBXNativeTarget "VeloxSafariUploadGuard" */;
+			buildPhases = (
+				2495D9671CD7C27545F329DD /* Sources */,
+				1F44F5665CA0EC6F6235D055 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VeloxSafariUploadGuard;
+			packageProductDependencies = (
+			);
+			productName = VeloxSafariUploadGuard;
+			productReference = 6509C6F0F8BF66069AFDB446 /* VeloxSafariUploadGuard.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		4C8D6520D11426F91F6C0094 /* VeloxCore */ = {
 			isa = PBXNativeTarget;
@@ -315,19 +419,23 @@
 				TargetAttributes = {
 					2834EBC53B0719C81C8F06C3 = {
 						DevelopmentTeam = L7US4BH7Q2;
-						ProvisioningStyle = Manual;
+						ProvisioningStyle = Automatic;
+					};
+					29CEF0376F50FC04B4D2313C = {
+						DevelopmentTeam = L7US4BH7Q2;
+						ProvisioningStyle = Automatic;
 					};
 					4C8D6520D11426F91F6C0094 = {
 						DevelopmentTeam = L7US4BH7Q2;
-						ProvisioningStyle = Manual;
+						ProvisioningStyle = Automatic;
 					};
 					5FCAEC0C9FE1FCDE2B2D281D = {
 						DevelopmentTeam = L7US4BH7Q2;
-						ProvisioningStyle = Manual;
+						ProvisioningStyle = Automatic;
 					};
 					D5AC70188B70DF6A00259046 = {
 						DevelopmentTeam = L7US4BH7Q2;
-						ProvisioningStyle = Manual;
+						ProvisioningStyle = Automatic;
 					};
 				};
 			};
@@ -347,11 +455,33 @@
 			targets = (
 				4C8D6520D11426F91F6C0094 /* VeloxCore */,
 				D5AC70188B70DF6A00259046 /* VeloxExtension */,
+				29CEF0376F50FC04B4D2313C /* VeloxSafariUploadGuard */,
 				2834EBC53B0719C81C8F06C3 /* VeloxMacDLP */,
 				5FCAEC0C9FE1FCDE2B2D281D /* VeloxCoreTests */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1F44F5665CA0EC6F6235D055 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				80ABB2C7F7B491AD084EDB9C /* background.js in Resources */,
+				3B6AD40F8ABBBFB4B1A25001 /* content.js in Resources */,
+				3BE50D23E7105248E5E72E6C /* manifest.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DA3DEF84388FED1EEC46ADF6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				66E06A7C3CAC9F61F85B1DB5 /* dist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
 		892C32C3666F7918E5AE055D /* Copy Swift Objective-C Interface Header */ = {
@@ -373,6 +503,15 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		2495D9671CD7C27545F329DD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				013D79010A61FCFA64D88368 /* SafariUploadGuardControlClient.swift in Sources */,
+				71B158FCAC601A18AC73FE4B /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		493621A1971CD8379CAA5E91 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -388,6 +527,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				317FC2D3CF2DDC1D65233EF1 /* ControlService.swift in Sources */,
 				4C4670E42E506BD3C6B697A2 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -397,6 +537,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				2D713E9C6FEDED1FF66546F7 /* AppDelegate.swift in Sources */,
+				921147591CB5C2DE21D84FC2 /* BundledWebSchemeHandler.swift in Sources */,
+				995F5E73389458081F6AD060 /* ConsoleController.swift in Sources */,
+				05FBE3C4CC47345F4E955468 /* ExtensionControlClient.swift in Sources */,
+				DA752384226B2256532D2F2D /* InstalledApplicationScanner.swift in Sources */,
 				7D53196C3966701A36A148D5 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -413,6 +557,7 @@
 				9E19391BE6C90FD93C33A0DD /* PolicyModel.swift in Sources */,
 				F168C25071F87FA7EE01F690 /* ProcessContext.swift in Sources */,
 				DC0893EE91F2C320157EE04A /* SecurityGuardian.swift in Sources */,
+				34CA9FBB775B00917A2B3D67 /* VeloxControlProtocol.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -438,6 +583,11 @@
 			isa = PBXTargetDependency;
 			target = 4C8D6520D11426F91F6C0094 /* VeloxCore */;
 			targetProxy = 9A29EA1C8F9224BB28F1322A /* PBXContainerItemProxy */;
+		};
+		DB4CB8471364A090EC2FB6C5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 29CEF0376F50FC04B4D2313C /* VeloxSafariUploadGuard */;
+			targetProxy = 8586224730B2CB5E6B6B7994 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -497,8 +647,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = L7US4BH7Q2;
@@ -584,8 +733,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = L7US4BH7Q2;
@@ -616,8 +764,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sources/VeloxApp/VeloxMacDLP.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = L7US4BH7Q2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -633,9 +780,29 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp;
 				PRODUCT_NAME = VeloxMacDLP;
-				PROVISIONING_PROFILE = "1B3C84E2-9A47-4952-B9CD-49D97E05C82A";
-				PROVISIONING_PROFILE_SPECIFIER = "Velox Mac DLP Host Profile";
 				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		A352ECEB0D05D856DF2D862E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Sources/VeloxSafariUploadGuard/VeloxSafariUploadGuard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = L7US4BH7Q2;
+				ENABLE_APP_SANDBOX = YES;
+				INFOPLIST_FILE = Sources/VeloxSafariUploadGuard/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp.uploadguard;
+				PRODUCT_NAME = VeloxDLPUploadGuard;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
 			};
 			name = Debug;
 		};
@@ -664,8 +831,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sources/VeloxApp/VeloxMacDLP.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = L7US4BH7Q2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -681,8 +847,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp;
 				PRODUCT_NAME = VeloxMacDLP;
-				PROVISIONING_PROFILE = "1B3C84E2-9A47-4952-B9CD-49D97E05C82A";
-				PROVISIONING_PROFILE_SPECIFIER = "Velox Mac DLP Host Profile";
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -709,12 +873,33 @@
 			};
 			name = Debug;
 		};
+		D025A18F5CF3E8EA877D86A3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Sources/VeloxSafariUploadGuard/VeloxSafariUploadGuard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = L7US4BH7Q2;
+				ENABLE_APP_SANDBOX = YES;
+				INFOPLIST_FILE = Sources/VeloxSafariUploadGuard/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp.uploadguard;
+				PRODUCT_NAME = VeloxDLPUploadGuard;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 		E017B88BA85DBBF3043464BB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Sources/VeloxExtension/VeloxMacDLPSE.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = L7US4BH7Q2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -730,8 +915,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp.endpointsecurity;
 				PRODUCT_NAME = co.velox.macdlp.endpointsecurity;
-				PROVISIONING_PROFILE = "4A9F2184-7F89-4D78-BC84-5C0D80E9A5B3";
-				PROVISIONING_PROFILE_SPECIFIER = "Velox Mac DLP Endpoint Security Profile";
 				SDKROOT = macosx;
 				WRAPPER_EXTENSION = systemextension;
 			};
@@ -741,8 +924,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Sources/VeloxExtension/VeloxMacDLPSE.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development: Vikas Bhoir (JZFXU9DXS8)";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = L7US4BH7Q2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -758,8 +940,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = co.velox.macdlp.endpointsecurity;
 				PRODUCT_NAME = co.velox.macdlp.endpointsecurity;
-				PROVISIONING_PROFILE = "4A9F2184-7F89-4D78-BC84-5C0D80E9A5B3";
-				PROVISIONING_PROFILE_SPECIFIER = "Velox Mac DLP Endpoint Security Profile";
 				SDKROOT = macosx;
 				WRAPPER_EXTENSION = systemextension;
 			};
@@ -782,6 +962,15 @@
 			buildConfigurations = (
 				77AFE06E7D289715BF3A197C /* Debug */,
 				B2D171BA47CDF6C4F586239B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5EAB6BB725C1B035F2EB9D7B /* Build configuration list for PBXNativeTarget "VeloxSafariUploadGuard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A352ECEB0D05D856DF2D862E /* Debug */,
+				D025A18F5CF3E8EA877D86A3 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

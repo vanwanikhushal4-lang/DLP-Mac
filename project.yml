@@ -7,8 +7,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
-    CODE_SIGN_STYLE: "Manual"
-    CODE_SIGN_IDENTITY: "Apple Development: Vikas Bhoir (JZFXU9DXS8)"
+    CODE_SIGN_STYLE: "Automatic"
     DEVELOPMENT_TEAM: "L7US4BH7Q2"
     ENABLE_HARDENED_RUNTIME: YES
 targets:
@@ -30,10 +29,15 @@ targets:
     platform: macOS
     sources:
       - path: Sources/VeloxExtension/main.swift
+      - path: Sources/VeloxExtension/ControlService.swift
     info:
       path: Sources/VeloxExtension/Info.plist
       properties:
         CFBundlePackageType: SYSX
+        CFBundleShortVersionString: "1.2.4"
+        CFBundleVersion: "7"
+        NSSystemExtensionUsageDescription: Velox Mac DLP monitors and controls application execution to enforce organizational security policy.
+        NSEndpointSecurityMachServiceName: L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc
     entitlements:
       path: Sources/VeloxExtension/VeloxMacDLPSE.entitlements
       properties:
@@ -45,25 +49,70 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp.endpointsecurity
         PRODUCT_NAME: co.velox.macdlp.endpointsecurity
         WRAPPER_EXTENSION: systemextension
-        CODE_SIGN_STYLE: "Manual"
+        CODE_SIGN_STYLE: "Automatic"
         CODE_SIGN_ENTITLEMENTS: Sources/VeloxExtension/VeloxMacDLPSE.entitlements
-        CODE_SIGN_IDENTITY: "Apple Development: Vikas Bhoir (JZFXU9DXS8)"
         DEVELOPMENT_TEAM: "L7US4BH7Q2"
-        PROVISIONING_PROFILE_SPECIFIER: "Velox Mac DLP Endpoint Security Profile"
-        PROVISIONING_PROFILE: "4A9F2184-7F89-4D78-BC84-5C0D80E9A5B3"
         ENABLE_HARDENED_RUNTIME: YES
         OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
+
+  VeloxSafariUploadGuard:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Sources/VeloxSafariUploadGuard/SafariWebExtensionHandler.swift
+      - path: Sources/VeloxSafariUploadGuard/SafariUploadGuardControlClient.swift
+      - path: BrowserExtensions/VeloxUploadGuard/manifest.json
+        buildPhase: resources
+      - path: BrowserExtensions/VeloxUploadGuard/background.js
+        buildPhase: resources
+      - path: BrowserExtensions/VeloxUploadGuard/content.js
+        buildPhase: resources
+    info:
+      path: Sources/VeloxSafariUploadGuard/Info.plist
+      properties:
+        CFBundleDisplayName: Velox DLP Upload Guard
+        CFBundleShortVersionString: "1.2.4"
+        CFBundleVersion: "7"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.Safari.web-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
+    entitlements:
+      path: Sources/VeloxSafariUploadGuard/VeloxSafariUploadGuard.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.temporary-exception.mach-lookup.global-name:
+          - L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp.uploadguard
+        PRODUCT_NAME: VeloxDLPUploadGuard
+        CODE_SIGN_STYLE: "Automatic"
+        CODE_SIGN_ENTITLEMENTS: Sources/VeloxSafariUploadGuard/VeloxSafariUploadGuard.entitlements
+        DEVELOPMENT_TEAM: "L7US4BH7Q2"
+        ENABLE_APP_SANDBOX: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
 
   VeloxMacDLP:
     type: application
     platform: macOS
     sources:
       - path: Sources/VeloxApp/AppDelegate.swift
+      - path: Sources/VeloxApp/BundledWebSchemeHandler.swift
       - path: Sources/VeloxApp/main.swift
+      - path: Sources/VeloxApp/ConsoleController.swift
+      - path: Sources/VeloxApp/ExtensionControlClient.swift
+      - path: Sources/VeloxApp/InstalledApplicationScanner.swift
+      - path: Web/dist
+        type: folder
+        buildPhase: resources
     info:
       path: Sources/VeloxApp/Info.plist
       properties:
+        CFBundleShortVersionString: "1.2.4"
+        CFBundleVersion: "7"
         LSUIElement: true
+        NSSystemExtensionUsageDescription: Velox Mac DLP installs an Endpoint Security system extension to enforce application-control policy.
     entitlements:
       path: Sources/VeloxApp/VeloxMacDLP.entitlements
       properties:
@@ -75,16 +124,14 @@ targets:
         destination: custom
         subpath: Contents/Library/SystemExtensions
         codeSign: true
+      - target: VeloxSafariUploadGuard
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp
         PRODUCT_NAME: VeloxMacDLP
-        CODE_SIGN_STYLE: "Manual"
+        CODE_SIGN_STYLE: "Automatic"
         CODE_SIGN_ENTITLEMENTS: Sources/VeloxApp/VeloxMacDLP.entitlements
-        CODE_SIGN_IDENTITY: "Apple Development: Vikas Bhoir (JZFXU9DXS8)"
         DEVELOPMENT_TEAM: "L7US4BH7Q2"
-        PROVISIONING_PROFILE_SPECIFIER: "Velox Mac DLP Host Profile"
-        PROVISIONING_PROFILE: "1B3C84E2-9A47-4952-B9CD-49D97E05C82A"
         ENABLE_HARDENED_RUNTIME: YES
         OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
 

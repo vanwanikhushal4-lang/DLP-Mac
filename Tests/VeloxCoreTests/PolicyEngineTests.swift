@@ -1,4 +1,5 @@
 import XCTest
+import Darwin
 @testable import VeloxCore
 
 final class PolicyEngineTests: XCTestCase {
@@ -244,4 +245,191 @@ final class PolicyEngineTests: XCTestCase {
             }
         }
     }
+
+    func testWebUploadEnforcementBlocksBrowserReadFromProtectedFolder() {
+        let policy = VeloxPolicy(
+            policyVersion: 8,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let chrome = ProcessContext(
+            pid: 400, parentPid: 1, uid: 501,
+            signingId: "com.google.Chrome.helper.renderer", teamId: "EQHXZ8M8AV",
+            isPlatformBinary: false, cdhash: nil,
+            executablePath: "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper"
+        )
+
+        let decision = engine.evaluateWebUploadOpen(
+            process: chrome,
+            filePath: "/Users/alice/Documents/customer-list.xlsx",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(decision.isUploadCandidate)
+        XCTAssertFalse(decision.shouldAllowOpen)
+        XCTAssertEqual(decision.decisionString, "blocked")
+        XCTAssertEqual(decision.policyVersion, 8)
+    }
+
+    func testWebUploadEnforcementAllowsDownloadWrite() {
+        let policy = VeloxPolicy(
+            policyVersion: 9,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let chrome = ProcessContext(
+            pid: 401, parentPid: 1, uid: 501,
+            signingId: "com.google.Chrome", teamId: "EQHXZ8M8AV",
+            isPlatformBinary: false, cdhash: nil,
+            executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        )
+
+        let decision = engine.evaluateWebUploadOpen(
+            process: chrome,
+            filePath: "/Users/alice/Downloads/allowed-download.zip",
+            requestedFlags: UInt32(FWRITE),
+            isRegularFile: true
+        )
+
+        XCTAssertFalse(decision.isUploadCandidate)
+        XCTAssertTrue(decision.shouldAllowOpen)
+        XCTAssertEqual(decision.decisionString, "allowed")
+    }
+
+    func testWebUploadEnforcementAllowsBrowserDownloadFinalization() {
+        let policy = VeloxPolicy(
+            policyVersion: 9,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let chrome = ProcessContext(
+            pid: 405, parentPid: 1, uid: 501,
+            signingId: "com.google.Chrome", teamId: "EQHXZ8M8AV",
+            isPlatformBinary: false, cdhash: nil,
+            executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        )
+
+        let partialDecision = engine.evaluateWebUploadOpen(
+            process: chrome,
+            filePath: "/Users/alice/Downloads/file.zip.crdownload",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+        let finalizationDecision = engine.evaluateWebUploadOpen(
+            process: chrome,
+            filePath: "/Users/alice/Downloads/file.zip",
+            requestedFlags: 32_773,
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(partialDecision.shouldAllowOpen)
+        XCTAssertFalse(partialDecision.isUploadCandidate)
+        XCTAssertTrue(finalizationDecision.shouldAllowOpen)
+        XCTAssertFalse(finalizationDecision.isUploadCandidate)
+    }
+
+    func testWebUploadEnforcementDoesNotBlockBrowserProfilesOrOtherApps() {
+        let policy = VeloxPolicy(
+            policyVersion: 10,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let chrome = ProcessContext(
+            pid: 402, parentPid: 1, uid: 501,
+            signingId: "com.google.Chrome", teamId: "EQHXZ8M8AV",
+            isPlatformBinary: false, cdhash: nil,
+            executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        )
+        let textEdit = ProcessContext(
+            pid: 403, parentPid: 1, uid: 501,
+            signingId: "com.apple.TextEdit", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Applications/TextEdit.app/Contents/MacOS/TextEdit"
+        )
+
+        let profileDecision = engine.evaluateWebUploadOpen(
+            process: chrome,
+            filePath: "/Users/alice/Library/Application Support/Google/Chrome/Default/History",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+        let otherAppDecision = engine.evaluateWebUploadOpen(
+            process: textEdit,
+            filePath: "/Users/alice/Documents/report.docx",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(profileDecision.shouldAllowOpen)
+        XCTAssertFalse(profileDecision.isUploadCandidate)
+        XCTAssertTrue(otherAppDecision.shouldAllowOpen)
+        XCTAssertFalse(otherAppDecision.isUploadCandidate)
+    }
+
+    func testWebUploadAuditModeRecordsWithoutBlocking() {
+        let policy = VeloxPolicy(
+            policyVersion: 11,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .auditOnly)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let safari = ProcessContext(
+            pid: 404, parentPid: 1, uid: 501,
+            signingId: "com.apple.Safari", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Applications/Safari.app/Contents/MacOS/Safari"
+        )
+
+        let decision = engine.evaluateWebUploadOpen(
+            process: safari,
+            filePath: "/Users/alice/Desktop/demo.pdf",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(decision.shouldAllowOpen)
+        XCTAssertTrue(decision.isUploadCandidate)
+        XCTAssertEqual(decision.decisionString, "would-block")
+    }
+
+    func testWebUploadEnforcementDoesNotBlockAppOrExtensionBundlesInUserDirs() {
+        let policy = VeloxPolicy(
+            policyVersion: 12,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            webUploadControl: WebUploadControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let safari = ProcessContext(
+            pid: 406, parentPid: 1, uid: 501,
+            signingId: "com.apple.Safari", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/System/Applications/Safari.app/Contents/MacOS/Safari"
+        )
+
+        // Safari inspecting an appex bundle inside ~/Downloads
+        let appexDecision = engine.evaluateWebUploadOpen(
+            process: safari,
+            filePath: "/Users/alice/Downloads/DevProject/App.app/Contents/PlugIns/Extension.appex/Contents/MacOS/Extension",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+        // Safari reading .DS_Store
+        let dsStoreDecision = engine.evaluateWebUploadOpen(
+            process: safari,
+            filePath: "/Users/alice/Downloads/.DS_Store",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(appexDecision.shouldAllowOpen, "Appex components must be allowed to open")
+        XCTAssertFalse(appexDecision.isUploadCandidate, "Appex components must never be treated as upload candidates")
+        XCTAssertTrue(dsStoreDecision.shouldAllowOpen, ".DS_Store must be allowed to open")
+        XCTAssertFalse(dsStoreDecision.isUploadCandidate, ".DS_Store must not be treated as upload candidate")
+    }
 }
+

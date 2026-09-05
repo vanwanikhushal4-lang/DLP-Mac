@@ -35,6 +35,28 @@
           }
         }
       }
+    },
+    "webUploadControl": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"],
+          "description": "Prototype browser file-upload enforcement mode."
+        },
+        "protectedDirectoryNames": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^/]+$"
+          }
+        }
+      }
     }
   },
   "$defs": {

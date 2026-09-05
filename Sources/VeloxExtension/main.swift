@@ -23,6 +23,17 @@ let esService = EndpointSecurityService(
     logger: eventLogger
 )
 
+// Secure control channel used by the signed host application's React console.
+let controlService = VeloxControlService(
+    policyManager: policyManager,
+    logPath: logPath,
+    eventLogger: eventLogger
+)
+let controlListenerDelegate = VeloxControlListenerDelegate(service: controlService)
+let controlListener = NSXPCListener(machServiceName: VeloxControlConstants.machServiceName)
+controlListener.delegate = controlListenerDelegate
+controlListener.resume()
+
 // When policy changes on disk, clear the ES kernel cache to prevent stale authorizations
 policyManager.onPolicyReloaded = { newPolicy in
     logger.info("Policy reloaded to version \(newPolicy.policyVersion). Invalidating kernel cache.")

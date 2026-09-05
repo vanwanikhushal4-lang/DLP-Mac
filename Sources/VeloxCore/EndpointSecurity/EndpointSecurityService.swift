@@ -100,8 +100,13 @@ public final class EndpointSecurityService: @unchecked Sendable {
             if let strongSelf = self {
                 strongSelf.handleMessage(client: esClient, message: messagePointer)
             } else {
-                // Fail-safe guaranteed response: Never leave kernel waiting
-                _ = es_respond_auth_result(esClient, messagePointer, ES_AUTH_RESULT_ALLOW, false)
+                // Fail-safe guaranteed response: Never leave kernel waiting. AUTH_OPEN
+                // is the sole ES auth event that requires a flags response.
+                if messagePointer.pointee.event_type == ES_EVENT_TYPE_AUTH_OPEN {
+                    _ = es_respond_flags_result(esClient, messagePointer, UInt32.max, false)
+                } else {
+                    _ = es_respond_auth_result(esClient, messagePointer, ES_AUTH_RESULT_ALLOW, false)
+                }
             }
         }
 
@@ -112,11 +117,12 @@ public final class EndpointSecurityService: @unchecked Sendable {
             let formatter = ISO8601DateFormatter()
             self.startTimeString = formatter.string(from: Date())
 
-            // Subscribe to ES_EVENT_TYPE_AUTH_EXEC
-            var events = [ES_EVENT_TYPE_AUTH_EXEC]
-            let subResult = es_subscribe(newClient!, &events, 1)
+            // AUTH_EXEC enforces application control. AUTH_OPEN provides the
+            // prototype browser-file-upload enforcement path.
+            var events = [ES_EVENT_TYPE_AUTH_EXEC, ES_EVENT_TYPE_AUTH_OPEN]
+            let subResult = es_subscribe(newClient!, &events, UInt32(events.count))
             if subResult != ES_RETURN_SUCCESS {
-                let err = "Failed to subscribe to ES_EVENT_TYPE_AUTH_EXEC: \(subResult.rawValue)"
+                let err = "Failed to subscribe to AUTH_EXEC/AUTH_OPEN: \(subResult.rawValue)"
                 stop()
                 return .failure(.subscriptionFailed(err))
             }
@@ -219,8 +225,13 @@ public final class EndpointSecurityService: @unchecked Sendable {
                 decisionLatencyMicros: latencyMicros,
                 authResponseResult: responseStatus
             )
-
             logger.logEventAsync(event)
+        } else if msg.event_type == ES_EVENT_TYPE_AUTH_OPEN {
+            handleOpenMessage(
+                client: client,
+                message: message,
+                startNs: startNs
+            )
         } else {
             // Guarantee: always respond to any other unhandled AUTH event with ALLOW
             let res = es_respond_auth_result(client, message, ES_AUTH_RESULT_ALLOW, false)
@@ -228,6 +239,69 @@ public final class EndpointSecurityService: @unchecked Sendable {
                 fputs("[VeloxEndpointSecurityService] es_respond_auth_result failed on fallback: \(res.rawValue)\n", stderr)
             }
         }
+    }
+
+    private func handleOpenMessage(
+        client: OpaquePointer,
+        message: UnsafePointer<es_message_t>,
+        startNs: UInt64
+    ) {
+        let msg = message.pointee
+        let actor = msg.process.pointee
+        let file = msg.event.open.file.pointee
+        let process = extractProcessContext(target: actor)
+        let filePath = stringFromToken(file.path) ?? ""
+        let requestedFlags = UInt32(bitPattern: msg.event.open.fflag)
+        let fileType = file.stat.st_mode & mode_t(S_IFMT)
+        let isRegularFile = fileType == mode_t(S_IFREG)
+
+        let decision = policyEngine.evaluateWebUploadOpen(
+            process: process,
+            filePath: filePath,
+            requestedFlags: requestedFlags,
+            isRegularFile: isRegularFile
+        )
+
+        let allowedFlags: UInt32 = decision.shouldAllowOpen ? UInt32.max : 0
+        let response = es_respond_flags_result(client, message, allowedFlags, false)
+        let responseStatus = response == ES_RESPOND_RESULT_SUCCESS
+            ? "success"
+            : "failed_code_\(response.rawValue)"
+
+        if response != ES_RESPOND_RESULT_SUCCESS {
+            fputs(
+                "[VeloxEndpointSecurityService] CRITICAL: AUTH_OPEN response failed: \(response.rawValue)\n",
+                stderr
+            )
+        }
+
+        // AUTH_OPEN is extremely high-volume. Persist only relevant upload
+        // candidates; unrelated browser and system file opens are not logged.
+        guard decision.isUploadCandidate else { return }
+
+        let endNs = DispatchTime.now().uptimeNanoseconds
+        let latencyMicros = max(1, UInt64((endNs - startNs) / 1_000))
+        logger.logEventAsync(
+            ExecutionEvent(
+                timestamp: nil,
+                eventId: UUID().uuidString,
+                module: "web-upload-control",
+                action: "browser-file-open",
+                decision: decision.decisionString,
+                ruleId: decision.matchingRuleId,
+                policyVersion: decision.policyVersion,
+                executablePath: process.executablePath,
+                signingId: process.signingId,
+                teamId: process.teamId,
+                pid: process.pid,
+                parentPid: process.parentPid,
+                uid: process.uid,
+                decisionLatencyMicros: latencyMicros,
+                authResponseResult: responseStatus,
+                resourcePath: filePath,
+                requestedOpenFlags: requestedFlags
+            )
+        )
     }
 
     public func extractProcessContext(target: es_process_t) -> ProcessContext {
@@ -269,7 +343,7 @@ public final class EndpointSecurityService: @unchecked Sendable {
         let record = HealthStatus(
             status: status,
             lastStarted: startTimeString,
-            subscribedEvents: ["ES_EVENT_TYPE_AUTH_EXEC"],
+            subscribedEvents: ["ES_EVENT_TYPE_AUTH_EXEC", "ES_EVENT_TYPE_AUTH_OPEN"],
             lastError: error,
             totalAuthHandled: totalAuthHandled,
             totalDeadlineMisses: totalDeadlineMisses

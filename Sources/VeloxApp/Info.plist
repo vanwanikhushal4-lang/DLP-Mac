@@ -15,10 +15,12 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>1.2.4</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>7</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSSystemExtensionUsageDescription</key>
+	<string>Velox Mac DLP installs an Endpoint Security system extension to enforce application-control policy.</string>
 </dict>
 </plist>

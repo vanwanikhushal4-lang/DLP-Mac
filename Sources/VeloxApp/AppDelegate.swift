@@ -1,5 +1,6 @@
 import Cocoa
-import SystemExtensions
+@preconcurrency import SystemExtensions
+@preconcurrency import SafariServices
 import os.log
 
 public struct HostStatusRecord: Codable, Sendable {
@@ -14,10 +15,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
     public static let statusFilePath = "/Library/Application Support/VeloxMacDLP/status.json"
 
     private let logger = Logger(subsystem: "co.velox.macdlp", category: "HostApp")
+    private var consoleController: ConsoleController?
+    private var statusItem: NSStatusItem?
 
+    @MainActor
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Headless confirmation: Ensure dock tile is hidden
         NSApp.setActivationPolicy(.accessory)
+        configureMenuBar()
 
         logger.info("Velox Mac DLP Headless Host starting...")
 
@@ -28,9 +33,78 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
             reportCurrentStatus()
             exit(0)
         } else {
-            // Default action: activate extension
-            activateSystemExtension()
+            let consoleController = ConsoleController()
+            self.consoleController = consoleController
+            consoleController.show()
+            if args.contains("--safari-settings") {
+                openSafariExtensionSettings()
+            }
+            if !args.contains("--console-only") {
+                activateSystemExtension()
+            }
         }
+    }
+
+    @MainActor
+    public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    /// Finder/Launchpad reopens an existing LSUIElement process instead of
+    /// launching it again. Always restore the hidden React console in that case.
+    @MainActor
+    public func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        consoleController?.show()
+        return true
+    }
+
+    @MainActor
+    private func configureMenuBar() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = NSImage(
+            systemSymbolName: "shield.lefthalf.filled",
+            accessibilityDescription: "Velox Mac DLP"
+        )
+
+        let menu = NSMenu()
+        let openItem = NSMenuItem(title: "Open Velox Console", action: #selector(openConsole), keyEquivalent: "o")
+        openItem.target = self
+        menu.addItem(openItem)
+        let safariItem = NSMenuItem(
+            title: "Open Safari Extension Settings",
+            action: #selector(openSafariExtensionSettings),
+            keyEquivalent: ""
+        )
+        safariItem.target = self
+        menu.addItem(safariItem)
+        menu.addItem(.separator())
+        let quitItem = NSMenuItem(title: "Quit Console", action: #selector(quitConsole), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
+        item.menu = menu
+        statusItem = item
+    }
+
+    @MainActor @objc private func openConsole() {
+        consoleController?.show()
+    }
+
+    @MainActor @objc private func openSafariExtensionSettings() {
+        let logger = self.logger
+        SFSafariApplication.showPreferencesForExtension(
+            withIdentifier: "co.velox.macdlp.uploadguard"
+        ) { error in
+            if let error {
+                logger.error("Unable to open Safari extension settings: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    @MainActor @objc private func quitConsole() {
+        NSApp.terminate(nil)
     }
 
     public func activateSystemExtension() {

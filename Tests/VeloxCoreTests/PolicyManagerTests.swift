@@ -40,6 +40,40 @@ final class PolicyManagerTests: XCTestCase {
         XCTAssertEqual(policy.applicationControl.mode, .enforce)
         XCTAssertEqual(policy.applicationControl.blockedApplications.count, 1)
         XCTAssertEqual(policy.applicationControl.blockedApplications[0].signingId, "com.apple.calculator")
+        XCTAssertEqual(policy.webUploadControl.mode, .disabled, "Legacy policies must default web uploads to disabled")
+    }
+
+    func testLoadWebUploadPolicyAndRejectUnknownProperties() throws {
+        let validJSON = """
+        {
+          "policyVersion": 12,
+          "applicationControl": { "mode": "enforce" },
+          "webUploadControl": {
+            "mode": "audit-only",
+            "protectedDirectoryNames": ["Desktop", "Documents"]
+          }
+        }
+        """
+        let policy = try VeloxPolicy.decodeStrict(from: validJSON.data(using: .utf8)!)
+        XCTAssertEqual(policy.webUploadControl.mode, .auditOnly)
+        XCTAssertEqual(policy.webUploadControl.protectedDirectoryNames, ["Desktop", "Documents"])
+
+        let invalidJSON = """
+        {
+          "policyVersion": 12,
+          "applicationControl": { "mode": "enforce" },
+          "webUploadControl": {
+            "mode": "enforce",
+            "bypassEverything": true
+          }
+        }
+        """
+        XCTAssertThrowsError(try VeloxPolicy.decodeStrict(from: invalidJSON.data(using: .utf8)!)) { error in
+            guard case PolicyValidationError.unknownProperty = error else {
+                XCTFail("Expected unknownProperty, got \(error)")
+                return
+            }
+        }
     }
 
     func testRejectUnknownProperties() {
@@ -192,5 +226,75 @@ final class PolicyManagerTests: XCTestCase {
         XCTAssertEqual(parsed["action"] as? String, "policy-error")
         XCTAssertEqual(parsed["decision"] as? String, "retained-last-valid")
         XCTAssertEqual(parsed["policyVersion"] as? Int, 1)
+    }
+
+    func testApplyPolicyPersistsAndActivatesSynchronously() throws {
+        let manager = PolicyManager(policyPath: policyURL.path)
+        let updated = VeloxPolicy(
+            policyVersion: 2,
+            applicationControl: ApplicationControlConfig(
+                mode: .enforce,
+                blockedApplications: [
+                    ApplicationRule(ruleId: "console-test", signingId: "com.apple.TextEdit")
+                ]
+            )
+        )
+
+        try manager.applyPolicy(updated, persistToDisk: true)
+
+        XCTAssertEqual(manager.policyEngine.currentPolicy(), updated)
+        XCTAssertEqual(PolicyManager.loadPolicyFromFile(at: policyURL.path), updated)
+    }
+
+    func testApplyPolicyRejectsRollbackWithoutOverwritingDisk() throws {
+        let active = VeloxPolicy(
+            policyVersion: 4,
+            applicationControl: ApplicationControlConfig(mode: .enforce)
+        )
+        let manager = PolicyManager(policyPath: policyURL.path, initialPolicy: active)
+        let rollback = VeloxPolicy(
+            policyVersion: 3,
+            applicationControl: ApplicationControlConfig(mode: .disabled)
+        )
+
+        XCTAssertThrowsError(try manager.applyPolicy(rollback, persistToDisk: true))
+        XCTAssertEqual(manager.policyEngine.currentPolicy(), active)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: policyURL.path))
+    }
+
+    func testMonitoringSurvivesConsecutiveAtomicPolicyReplacements() throws {
+        let initial = VeloxPolicy(
+            policyVersion: 1,
+            applicationControl: ApplicationControlConfig(mode: .enforce)
+        )
+        try JSONEncoder().encode(initial).write(to: policyURL)
+
+        let manager = PolicyManager(policyPath: policyURL.path)
+        let versionTwoReloaded = expectation(description: "version two reloaded")
+        manager.onPolicyReloaded = { policy in
+            if policy.policyVersion == 2 { versionTwoReloaded.fulfill() }
+        }
+        manager.startMonitoring()
+
+        let versionTwo = VeloxPolicy(
+            policyVersion: 2,
+            applicationControl: ApplicationControlConfig(mode: .auditOnly)
+        )
+        try JSONEncoder().encode(versionTwo).write(to: policyURL, options: .atomic)
+        wait(for: [versionTwoReloaded], timeout: 3)
+
+        let versionThreeReloaded = expectation(description: "version three reloaded")
+        manager.onPolicyReloaded = { policy in
+            if policy.policyVersion == 3 { versionThreeReloaded.fulfill() }
+        }
+        let versionThree = VeloxPolicy(
+            policyVersion: 3,
+            applicationControl: ApplicationControlConfig(mode: .disabled)
+        )
+        try JSONEncoder().encode(versionThree).write(to: policyURL, options: .atomic)
+        wait(for: [versionThreeReloaded], timeout: 3)
+
+        XCTAssertEqual(manager.policyEngine.currentPolicy(), versionThree)
+        manager.stopMonitoring()
     }
 }

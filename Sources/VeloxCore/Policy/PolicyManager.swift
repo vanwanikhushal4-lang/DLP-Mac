@@ -11,6 +11,7 @@ public final class PolicyManager: @unchecked Sendable {
     private var fileSource: DispatchSourceFileSystemObject?
     private var fileDescriptor: Int32 = -1
     private let monitorQueue = DispatchQueue(label: "co.velox.macdlp.policy.monitor", qos: .utility)
+    private let mutationLock = NSLock()
 
     public var onPolicyReloaded: (@Sendable (VeloxPolicy) -> Void)?
     public var onPolicyError: (@Sendable (String) -> Void)?
@@ -87,16 +88,52 @@ public final class PolicyManager: @unchecked Sendable {
             return false
         }
 
-        let currentVersion = policyEngine.currentPolicy().policyVersion
-        if newPolicy.policyVersion < currentVersion {
-            let msg = "Policy rollback rejected: version \(newPolicy.policyVersion) is lower than active version \(currentVersion)."
-            reportError(msg)
+        do {
+            try applyPolicy(newPolicy, persistToDisk: false)
+            return true
+        } catch {
+            reportError(String(describing: error))
             return false
+        }
+    }
+
+    /// Validates and activates a policy synchronously. The privileged control
+    /// service uses this path so UI changes do not depend on filesystem events.
+    /// Persistence occurs before the in-memory swap; a failed write therefore
+    /// never reports a policy as active.
+    public func applyPolicy(_ newPolicy: VeloxPolicy, persistToDisk: Bool) throws {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        try newPolicy.validate()
+        let currentPolicy = policyEngine.currentPolicy()
+        if newPolicy == currentPolicy {
+            return
+        }
+        let currentVersion = currentPolicy.policyVersion
+        guard newPolicy.policyVersion >= currentVersion else {
+            throw PolicyValidationError.versionRollback(
+                "Policy version \(newPolicy.policyVersion) is lower than active version \(currentVersion)."
+            )
+        }
+
+        if persistToDisk {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            let data = try encoder.encode(newPolicy)
+            let destination = URL(fileURLWithPath: policyPath)
+            let parent = destination.deletingLastPathComponent()
+            try FileManager.default.createDirectory(
+                at: parent,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o755]
+            )
+            try data.write(to: destination, options: .atomic)
+            FileSecurity.secureFileIfNeeded(atPath: policyPath)
         }
 
         policyEngine.updatePolicy(newPolicy)
         onPolicyReloaded?(newPolicy)
-        return true
     }
 
     private func reportError(_ message: String) {
@@ -131,28 +168,11 @@ public final class PolicyManager: @unchecked Sendable {
         let parentDir = (policyPath as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: parentDir, withIntermediateDirectories: true)
 
-        let fd = open(policyPath, O_EVTONLY)
-        if fd < 0 {
-            let dirFd = open(parentDir, O_EVTONLY)
-            if dirFd >= 0 {
-                self.fileDescriptor = dirFd
-                let source = DispatchSource.makeFileSystemObjectSource(
-                    fileDescriptor: dirFd,
-                    eventMask: [.write, .extend, .rename, .attrib],
-                    queue: monitorQueue
-                )
-                source.setEventHandler { [weak self] in
-                    self?.handleFileOrDirChange()
-                }
-                source.setCancelHandler {
-                    close(dirFd)
-                }
-                source.resume()
-                self.fileSource = source
-            }
-            return
-        }
-
+        // Watch the directory rather than policy.json's inode. Atomic policy
+        // writes replace that inode; an inode-bound watcher has a gap while it
+        // rebinds and can miss consecutive backend/UI policy updates.
+        let fd = open(parentDir, O_EVTONLY)
+        guard fd >= 0 else { return }
         self.fileDescriptor = fd
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
@@ -161,14 +181,7 @@ public final class PolicyManager: @unchecked Sendable {
         )
 
         source.setEventHandler { [weak self] in
-            guard let self = self else { return }
-            let flags = source.data
-            if flags.contains(.delete) || flags.contains(.rename) {
-                self.handleFileOrDirChange()
-                self.startMonitoring()
-            } else if flags.contains(.write) || flags.contains(.extend) || flags.contains(.attrib) {
-                self.handleFileOrDirChange()
-            }
+            self?.handleFileOrDirChange()
         }
 
         source.setCancelHandler {

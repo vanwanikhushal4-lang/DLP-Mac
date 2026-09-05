@@ -125,13 +125,86 @@ public struct ApplicationControlConfig: Codable, Sendable, Equatable {
     }
 }
 
+/// Prototype policy for one-way browser file-transfer control.
+///
+/// The Endpoint Security implementation intentionally protects only regular files
+/// in well-known user content folders. Browser profile data under ~/Library is
+/// never included, and write-only opens remain allowed so downloads can complete.
+public struct WebUploadControlConfig: Codable, Sendable, Equatable {
+    public static let defaultProtectedDirectoryNames = [
+        "Desktop", "Documents", "Downloads", "Movies", "Music", "Pictures", "Public"
+    ]
+
+    public let mode: PolicyMode
+    public let protectedDirectoryNames: [String]
+
+    public init(
+        mode: PolicyMode = .disabled,
+        protectedDirectoryNames: [String] = WebUploadControlConfig.defaultProtectedDirectoryNames
+    ) {
+        self.mode = mode
+        self.protectedDirectoryNames = protectedDirectoryNames
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decode(PolicyMode.self, forKey: .mode)
+        self.protectedDirectoryNames = try container.decodeIfPresent(
+            [String].self,
+            forKey: .protectedDirectoryNames
+        ) ?? Self.defaultProtectedDirectoryNames
+    }
+
+    public func validate() throws {
+        guard !protectedDirectoryNames.isEmpty else {
+            throw PolicyValidationError.invalidCriterion(
+                "webUploadControl.protectedDirectoryNames cannot be empty"
+            )
+        }
+
+        var seen = Set<String>()
+        for directoryName in protectedDirectoryNames {
+            let trimmed = directoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  trimmed != ".",
+                  trimmed != "..",
+                  !trimmed.contains("/") else {
+                throw PolicyValidationError.invalidCriterion(
+                    "Protected directory names must be single safe path components"
+                )
+            }
+            guard seen.insert(trimmed.lowercased()).inserted else {
+                throw PolicyValidationError.invalidCriterion(
+                    "Duplicate protected directory name '\(trimmed)'"
+                )
+            }
+        }
+    }
+}
+
 public struct VeloxPolicy: Codable, Sendable, Equatable {
     public let policyVersion: Int
     public let applicationControl: ApplicationControlConfig
+    public let webUploadControl: WebUploadControlConfig
 
-    public init(policyVersion: Int, applicationControl: ApplicationControlConfig) {
+    public init(
+        policyVersion: Int,
+        applicationControl: ApplicationControlConfig,
+        webUploadControl: WebUploadControlConfig = WebUploadControlConfig()
+    ) {
         self.policyVersion = policyVersion
         self.applicationControl = applicationControl
+        self.webUploadControl = webUploadControl
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.policyVersion = try container.decode(Int.self, forKey: .policyVersion)
+        self.applicationControl = try container.decode(ApplicationControlConfig.self, forKey: .applicationControl)
+        self.webUploadControl = try container.decodeIfPresent(
+            WebUploadControlConfig.self,
+            forKey: .webUploadControl
+        ) ?? WebUploadControlConfig()
     }
 
     /// Strictly parses and validates JSON data, rejecting any unknown properties or malformed fields.
@@ -141,7 +214,7 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         }
 
         // Validate top-level keys
-        let validTopKeys: Set<String> = ["policyVersion", "applicationControl"]
+        let validTopKeys: Set<String> = ["policyVersion", "applicationControl", "webUploadControl"]
         for key in jsonObject.keys {
             if !validTopKeys.contains(key) {
                 throw PolicyValidationError.unknownProperty("Unknown property '\(key)' at policy root")
@@ -186,6 +259,17 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             }
         }
 
+        if let webUploadObj = jsonObject["webUploadControl"] as? [String: Any] {
+            let validWebUploadKeys: Set<String> = ["mode", "protectedDirectoryNames"]
+            for key in webUploadObj.keys {
+                if !validWebUploadKeys.contains(key) {
+                    throw PolicyValidationError.unknownProperty(
+                        "Unknown property '\(key)' in webUploadControl"
+                    )
+                }
+            }
+        }
+
         let policy = try JSONDecoder().decode(VeloxPolicy.self, from: data)
         try policy.validate()
         return policy
@@ -195,6 +279,8 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         guard policyVersion >= 1 else {
             throw PolicyValidationError.invalidVersion("Policy version must be >= 1, got \(policyVersion)")
         }
+
+        try webUploadControl.validate()
 
         var seenRuleIds = Set<String>()
         for rule in applicationControl.allowedApplications {

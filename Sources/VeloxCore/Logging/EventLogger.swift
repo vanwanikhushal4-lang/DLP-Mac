@@ -17,6 +17,10 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
     public let uid: UInt32
     public let decisionLatencyMicros: UInt64
     public let authResponseResult: String?
+    public let resourcePath: String?
+    public let requestedOpenFlags: UInt32?
+    public let pageURL: String?
+    public let interaction: String?
 
     public init(
         timestamp: String? = nil,
@@ -33,7 +37,11 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
         parentPid: Int32,
         uid: UInt32,
         decisionLatencyMicros: UInt64,
-        authResponseResult: String? = nil
+        authResponseResult: String? = nil,
+        resourcePath: String? = nil,
+        requestedOpenFlags: UInt32? = nil,
+        pageURL: String? = nil,
+        interaction: String? = nil
     ) {
         if let ts = timestamp {
             self.timestamp = ts
@@ -56,6 +64,10 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
         self.uid = uid
         self.decisionLatencyMicros = decisionLatencyMicros
         self.authResponseResult = authResponseResult
+        self.resourcePath = resourcePath
+        self.requestedOpenFlags = requestedOpenFlags
+        self.pageURL = pageURL
+        self.interaction = interaction
     }
 }
 

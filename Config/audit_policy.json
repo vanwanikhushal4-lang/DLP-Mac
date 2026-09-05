@@ -8,5 +8,13 @@
         "signingId": "com.apple.calculator"
       }
     ]
+  },
+  "webUploadControl": {
+    "mode": "audit-only",
+    "protectedDirectoryNames": [
+      "Desktop",
+      "Documents",
+      "Downloads"
+    ]
   }
 }
