@@ -21,6 +21,12 @@
       "Public"
     ]
   },
+  "usbStorageControl": {
+    "mode": "enforce",
+    "blockExternalStorage": true,
+    "encryptionMode": "disabled",
+    "containerSizePercent": 90
+  },
   "nearbyTransferControl": {
     "mode": "disabled",
     "blockAirDrop": true,
@@ -38,5 +44,21 @@
   "clipboardControl": {
     "mode": "disabled",
     "blockedApplications": []
+  },
+  "printerControl": {
+    "mode": "disabled",
+    "blockAllPrinters": true
+  },
+  "networkFlowControl": {
+    "mode": "disabled",
+    "defaultAction": "allow",
+    "rules": [
+      {
+        "ruleId": "block-raw-pastebin",
+        "domain": "pastebin.com",
+        "protocol": "tcp",
+        "action": "block"
+      }
+    ]
   }
 }

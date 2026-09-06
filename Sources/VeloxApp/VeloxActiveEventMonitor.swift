@@ -167,7 +167,9 @@ public final class VeloxActiveEventMonitor: @unchecked Sendable {
         // 2. If blocked, immediately trigger the native macOS Notification Center alert
         if event.decision == "blocked" {
             let target = event.resourcePath ?? event.executablePath
-            let detail = event.signingId ?? event.teamId ?? ""
+            let detail = event.module == "network-flow-control"
+                ? event.executablePath
+                : (event.signingId ?? event.teamId ?? "")
             VeloxNotificationManager.shared.postBlockedNotification(
                 module: event.module,
                 action: event.action,

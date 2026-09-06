@@ -21,6 +21,11 @@ import Foundation
         withReply reply: @escaping (String) -> Void
     )
 
+    func setUSBEncryptionMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
     func setNearbyTransferMode(
         _ mode: String,
         withReply reply: @escaping (String) -> Void
@@ -28,6 +33,31 @@ import Foundation
 
     func setClipboardMode(
         _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setPrinterMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setNetworkFlowMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setNetworkFlowDefaultAction(
+        _ action: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func addNetworkFlowRule(
+        _ ruleJSON: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func removeNetworkFlowRule(
+        ruleId: String,
         withReply reply: @escaping (String) -> Void
     )
 
@@ -49,6 +79,13 @@ import Foundation
     /// Records a browser-bound upload decision made before the website sees
     /// the selected files. The payload is JSON and is validated by the service.
     func recordBrowserUploadAttempt(
+        _ payloadJSON: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// Persists a privacy-safe flow decision forwarded by the Network Filter
+    /// system extension through the signed host application.
+    func recordNetworkFlowEvent(
         _ payloadJSON: String,
         withReply reply: @escaping (String) -> Void
     )
@@ -79,6 +116,17 @@ import Foundation
     )
 }
 
+/// Host-side registration surface exposed by the Network Filter system
+/// extension's app-group-scoped Mach service.
+@objc public protocol VeloxNetworkEventServiceProtocol {
+    func registerClient(withReply reply: @escaping (Bool) -> Void)
+}
+
+/// Provider-to-host callback carrying only the structured, privacy-safe event.
+@objc public protocol VeloxNetworkEventClientProtocol {
+    func handleNetworkEvent(_ eventJSON: String)
+}
+
 public enum VeloxControlConstants {
     public static let machServiceName = "L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc"
     public static let hostBundleIdentifier = "co.velox.macdlp"
@@ -88,4 +136,8 @@ public enum VeloxControlConstants {
         safariUploadGuardBundleIdentifier
     ]
     public static let teamIdentifier = "L7US4BH7Q2"
+}
+
+public enum VeloxNetworkEventConstants {
+    public static let machServiceName = "L7US4BH7Q2.co.velox.macdlp.networkfilter.xpc"
 }

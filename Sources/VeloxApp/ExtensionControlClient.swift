@@ -29,6 +29,12 @@ final class ExtensionControlClient: @unchecked Sendable {
         }
     }
 
+    func setUSBEncryptionMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setUSBEncryptionMode(mode, withReply: completion)
+        }
+    }
+
     func setNearbyTransferMode(_ mode: String, completion: @escaping (String) -> Void) {
         withProxy(completion: completion) { proxy in
             proxy.setNearbyTransferMode(mode, withReply: completion)
@@ -38,6 +44,36 @@ final class ExtensionControlClient: @unchecked Sendable {
     func setClipboardMode(_ mode: String, completion: @escaping (String) -> Void) {
         withProxy(completion: completion) { proxy in
             proxy.setClipboardMode(mode, withReply: completion)
+        }
+    }
+
+    func setPrinterMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setPrinterMode(mode, withReply: completion)
+        }
+    }
+
+    func setNetworkFlowMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setNetworkFlowMode(mode, withReply: completion)
+        }
+    }
+
+    func setNetworkFlowDefaultAction(_ action: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setNetworkFlowDefaultAction(action, withReply: completion)
+        }
+    }
+
+    func addNetworkFlowRule(_ ruleJSON: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.addNetworkFlowRule(ruleJSON, withReply: completion)
+        }
+    }
+
+    func removeNetworkFlowRule(ruleId: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.removeNetworkFlowRule(ruleId: ruleId, withReply: completion)
         }
     }
 
@@ -68,6 +104,12 @@ final class ExtensionControlClient: @unchecked Sendable {
     func recordBrowserUploadAttempt(_ payloadJSON: String, completion: @escaping (String) -> Void) {
         withProxy(completion: completion) { proxy in
             proxy.recordBrowserUploadAttempt(payloadJSON, withReply: completion)
+        }
+    }
+
+    func recordNetworkFlowEvent(_ payloadJSON: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.recordNetworkFlowEvent(payloadJSON, withReply: completion)
         }
     }
 

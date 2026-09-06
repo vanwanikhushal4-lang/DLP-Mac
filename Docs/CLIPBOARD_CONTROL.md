@@ -1,64 +1,68 @@
-# Velox Mac DLP — Clipboard Control Architecture & Enforcement
+# Clipboard Control
 
-## Overview
+## Prototype contract
 
-**Clipboard Control** prevents unauthorized data exfiltration via the macOS system pasteboard (`NSPasteboard.general`). It provides two enforceable security policies:
-1. **Block All Clipboard**: Immediately clears any new content copied to the system pasteboard from any application on the Mac.
-2. **Block Copy From Selected Applications**: Identifies the foreground source application by its signed code identity (Team ID, bundle ID / signing identifier, platform binary status), and clears newly copied content if the application matches a blocked rule in policy.
+Clipboard Control monitors the logged-in user's general macOS pasteboard and removes newly copied content when policy requires it. It supports two blocking scopes:
 
----
+- `block-all`: clear every new clipboard item regardless of the source application.
+- `block-selected-apps`: clear new items only when the foreground source process matches a configured signed application rule.
 
-## Technical Architecture & Boundary Separation
+`disabled` stops normal clipboard monitoring and blocking. Application selections are retained so an administrator can switch modes without rebuilding the list.
 
-### 1. The macOS Platform Limitation
-* **No Kernel Clipboard Event**: Apple's `EndpointSecurity` framework does **not** provide clipboard authorization events (`AUTH_COPY` or `AUTH_PASTE` do not exist in macOS).
-* **Agent-Level Observation**: Clipboard Control is enforced by the logged-in user agent process (`VeloxMacDLP.app`) running in the user's GUI session.
-* **Privileged Logging & Policy Storage**: The root Endpoint Security system extension (`VeloxExtension`) maintains authoritative policy persistence, snapshot distribution, and writes to `/Library/Logs/VeloxMacDLP/events.jsonl`.
+The source application is represented by code-signing ID and exact executable path. Display names are used only in the console and notifications.
 
-### 2. Detection & Immediate Content Neutralization
-* The user agent continuously monitors `NSPasteboard.general.changeCount`.
-* When a change occurs:
-  1. The agent inspects `NSWorkspace.shared.frontmostApplication`.
-  2. The agent queries macOS Security Framework (`SecCodeCopyGuestWithAttributes`, `SecCodeCopyStaticCode`, `SecCodeCopySigningInformation`) to extract cryptographically verified code signing metadata.
-  3. The `PolicyEngine` evaluates whether copying is allowed.
-  4. If blocked, `pasteboard.clearContents()` is executed immediately—wiping the content before other processes can paste it.
-  5. An audit event (`module: "clipboard-control", action: "copy", decision: "blocked"`) is dispatched to the privileged daemon via XPC.
-  6. A native macOS notification banner is dispatched to inform the user that copying was blocked.
+## Data handling
 
-### 3. Coverage Across Copy Vectors
-Because `NSPasteboard` changes occur regardless of how the copy operation was triggered, enforcement covers:
-- Keyboard shortcuts (`⌘C`, `⌃C`)
-- Application menu commands (`Edit > Copy`)
-- Contextual menus (Right click -> Copy)
-- Drag-and-drop actions that write items to the pasteboard
+Velox never records the copied payload. Clipboard events contain only:
 
----
+- source application name and signed process identity;
+- coarse categories such as text, formatted text, image, files, or application data;
+- pasteboard item count;
+- policy decision and matching rule ID.
 
-## Policy Configuration Schema
+Copied text, image bytes, file paths, and arbitrary pasteboard values are not sent through XPC or written to the activity log.
 
-```json
-{
-  "clipboardControl": {
-    "mode": "block-selected-apps",
-    "blockedApplications": [
-      {
-        "ruleId": "block-terminal-copy",
-        "signingId": "com.apple.Terminal"
-      }
-    ]
-  }
-}
+## Enforcement flow
+
+1. The host app polls `NSPasteboard.general.changeCount` every 100 milliseconds.
+2. On a change, it captures the foreground process and inspects its live code signature.
+3. The local `PolicyEngine` evaluates `clipboardControl`.
+4. A blocking decision calls `clearContents()` immediately and posts **Blocked by Velox DLP**.
+5. Privacy-safe event metadata is sent through authenticated XPC to the system extension, which reevaluates the authoritative policy and writes the structured event.
+
+The existing copied-file browser-upload guard remains separate. A clipboard item cleared by Clipboard Control cannot continue to browser-upload evaluation.
+
+## Manual acceptance test
+
+Use a signed build with the host app running and the system extension active.
+
+### Block all
+
+1. Open VeloxMacDLP, choose **Clipboard Control**, then **Block all**.
+2. Copy plain text from TextEdit or Notes and immediately paste into a second app. The original data must not paste.
+3. Repeat with rich text, an image, and a Finder file copy.
+4. Confirm a **Blocked by Velox DLP** notification appears and Live activity identifies the source app and coarse content type without showing the copied data.
+
+### Selected apps
+
+1. Choose **Selected apps**, select TextEdit, and leave Notes unselected.
+2. Copy unique text from TextEdit and paste into Notes. It must be cleared and logged as blocked.
+3. Copy unique text from Notes and paste into TextEdit. It must remain available and be logged as allowed.
+4. Toggle TextEdit off and confirm copying from it works again.
+5. Quit the Velox host and confirm Clipboard Control no longer enforces; this demonstrates why production deployment must keep the per-user host alive with managed launch-at-login.
+
+### Race and path coverage
+
+Repeat both modes using Command-C, the Edit menu, context menus, Finder file copy, screenshots copied to the clipboard, and a rapid copy-then-paste sequence. Exercise clipboard-manager software separately because background writers cannot always be attributed to the foreground app.
+
+Inspect evidence with:
+
+```sh
+tail -f "/Library/Logs/VeloxMacDLP/events.jsonl"
 ```
 
----
+## macOS boundary
 
-## Privacy-Safe Telemetry
+Endpoint Security has no clipboard authorization event, and `NSPasteboard` has no public pre-copy denial callback. The prototype therefore performs rapid post-copy clearing rather than a kernel preflight denial. A paste attempted inside the polling interval can race enforcement, and background clipboard writers can be attributed to the foreground process.
 
-Velox DLP strictly preserves user privacy:
-- Copied text, images, or payload contents are **never** inspected, captured, or logged.
-- The audit record contains only coarse metadata:
-  - `sourceApplication`: Process name and bundle ID
-  - `signingId`: Cryptographic signing identifier
-  - `contentTypes`: Generic type tags (e.g. `["text"]`, `["image"]`, `["file-url"]`)
-  - `itemCount`: Number of items copied
-  - `decision`: `"blocked"` or `"allowed"`
+Do not describe this prototype as zero-race prevention. Production hardening requires a managed, non-user-quittable per-user agent, watchdog/launch-at-login behavior, latency telemetry, stress testing, and documented handling for clipboard managers and remote-session tools.

@@ -78,7 +78,9 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
 
         switch action {
         case "getSnapshot":
-            controlClient.getSnapshot { [weak self] json in self?.deliver(requestId: requestId, json: json) }
+            controlClient.getSnapshot { [weak self] json in
+                self?.deliverSnapshot(requestId: requestId, extensionJSON: json)
+            }
 
         case "getEvents":
             let limit = body["limit"] as? Int ?? 30
@@ -109,6 +111,15 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
                 self?.deliver(requestId: requestId, json: json)
             }
 
+        case "setUSBEncryptionMode":
+            guard let mode = body["mode"] as? String else {
+                deliverError(requestId: requestId, message: "Missing USB encryption policy mode.")
+                return
+            }
+            controlClient.setUSBEncryptionMode(mode) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
         case "setNearbyTransferMode":
             guard let mode = body["mode"] as? String else {
                 deliverError(requestId: requestId, message: "Missing nearby-transfer policy mode.")
@@ -124,6 +135,58 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
                 return
             }
             controlClient.setClipboardMode(mode) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
+        case "setPrinterMode":
+            guard let mode = body["mode"] as? String else {
+                deliverError(requestId: requestId, message: "Missing printer-control mode.")
+                return
+            }
+            controlClient.setPrinterMode(mode) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
+        case "setNetworkFlowMode":
+            guard let mode = body["mode"] as? String else {
+                deliverError(requestId: requestId, message: "Missing network-flow policy mode.")
+                return
+            }
+            controlClient.setNetworkFlowMode(mode) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
+        case "setNetworkFlowDefaultAction":
+            guard let flowAction = body["defaultAction"] as? String ?? body["action"] as? String else {
+                deliverError(requestId: requestId, message: "Missing network-flow default action.")
+                return
+            }
+            controlClient.setNetworkFlowDefaultAction(flowAction) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
+        case "addNetworkFlowRule":
+            let ruleJSON: String
+            if let str = body["rule"] as? String {
+                ruleJSON = str
+            } else if let dict = body["rule"] as? [String: Any],
+                      let data = try? JSONSerialization.data(withJSONObject: dict),
+                      let str = String(data: data, encoding: .utf8) {
+                ruleJSON = str
+            } else {
+                deliverError(requestId: requestId, message: "Missing or invalid network flow rule.")
+                return
+            }
+            controlClient.addNetworkFlowRule(ruleJSON) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
+        case "removeNetworkFlowRule":
+            guard let ruleId = body["ruleId"] as? String else {
+                deliverError(requestId: requestId, message: "Missing ruleId to remove.")
+                return
+            }
+            controlClient.removeNetworkFlowRule(ruleId: ruleId) { [weak self] json in
                 self?.deliver(requestId: requestId, json: json)
             }
 
@@ -217,6 +280,33 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
                 "window.veloxNativeResponse(\(requestLiteral), \(json));"
             )
         }
+    }
+
+    /// Adds host-owned Network Extension activation state to the policy snapshot
+    /// returned by the Endpoint Security XPC service. Keeping these states
+    /// separate prevents the console from claiming that socket filtering is live
+    /// merely because the Endpoint Security extension answered successfully.
+    nonisolated private func deliverSnapshot(requestId: String, extensionJSON: String) {
+        guard let data = extensionJSON.data(using: .utf8),
+              var snapshot = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            deliver(requestId: requestId, json: extensionJSON)
+            return
+        }
+
+        let record = HostExtensionStateStore.status(for: AppDelegate.networkExtensionIdentifier)
+        let status = record?.activationStatus ?? "not_requested"
+        snapshot["networkFilterStatus"] = status
+        snapshot["networkFilterEnabled"] = status == "enabled"
+        snapshot["networkFilterMessage"] = record?.details ?? "The Network Filter has not been activated yet."
+
+        guard let enrichedData = try? JSONSerialization.data(
+            withJSONObject: snapshot,
+            options: [.sortedKeys, .withoutEscapingSlashes]
+        ), let enrichedJSON = String(data: enrichedData, encoding: .utf8) else {
+            deliver(requestId: requestId, json: extensionJSON)
+            return
+        }
+        deliver(requestId: requestId, json: enrichedJSON)
     }
 
     private func deliver<T: Encodable>(requestId: String, encodable: T) {

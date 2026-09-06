@@ -18,9 +18,17 @@
 	<string>1.8.2</string>
 	<key>CFBundleVersion</key>
 	<string>17</string>
-	<key>NSEndpointSecurityMachServiceName</key>
-	<string>L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc</string>
 	<key>NSSystemExtensionUsageDescription</key>
-	<string>Velox Mac DLP monitors and controls application execution to enforce organizational security policy.</string>
+	<string>Velox Mac DLP monitors and filters outbound network flow connections according to organizational security policy.</string>
+	<key>NetworkExtension</key>
+	<dict>
+		<key>NEMachServiceName</key>
+		<string>$(TeamIdentifierPrefix)co.velox.macdlp.networkfilter.xpc</string>
+		<key>NEProviderClasses</key>
+		<dict>
+			<key>com.apple.networkextension.filter-data</key>
+			<string>$(PRODUCT_MODULE_NAME).FilterDataProvider</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

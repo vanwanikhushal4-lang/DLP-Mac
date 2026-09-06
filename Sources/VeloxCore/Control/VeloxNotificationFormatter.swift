@@ -47,6 +47,12 @@ public enum VeloxNotificationFormatter {
             let body = "External storage '\(volumeName)' was blocked from mounting."
             return FormattedNotification(title: title, subtitle: subtitle, body: body)
 
+        case "usb-encryption-control":
+            let subtitle = "USB Encryption Required"
+            let volumeName = parseVolumeName(from: target)
+            let body = "A plaintext copy to '\(volumeName)' was blocked. Copy into Velox Secure USB instead."
+            return FormattedNotification(title: title, subtitle: subtitle, body: body)
+
         case "nearby-transfer-control":
             let fileName = parseFileName(from: target)
             let channel: String
@@ -68,6 +74,26 @@ public enum VeloxNotificationFormatter {
             let content = target.trimmingCharacters(in: .whitespacesAndNewlines)
             let summary = content.isEmpty ? "clipboard data" : content
             let body = "Copying \(summary) from \(source) was blocked by security policy."
+            return FormattedNotification(title: title, subtitle: subtitle, body: body)
+
+        case "printer-control":
+            let subtitle = "Printing Blocked"
+            let queue = target.trimmingCharacters(in: .whitespacesAndNewlines)
+            let destination = queue.isEmpty ? "this printer" : "printer '\(queue)'"
+            let body = "Printing to \(destination) was blocked by security policy."
+            return FormattedNotification(title: title, subtitle: subtitle, body: body)
+
+        case "network-flow-control":
+            let subtitle = "Network Connection Blocked"
+            let destination = target.trimmingCharacters(in: .whitespacesAndNewlines)
+            let appName = parseApplicationName(from: detail, detail: "")
+            let blockedDestination = destination.isEmpty ? "a remote destination" : destination
+            let body: String
+            if appName.isEmpty || appName == "unknown" {
+                body = "Velox DLP blocked \(blockedDestination)."
+            } else {
+                body = "Velox DLP blocked \(blockedDestination) for \(appName)."
+            }
             return FormattedNotification(title: title, subtitle: subtitle, body: body)
 
         default:

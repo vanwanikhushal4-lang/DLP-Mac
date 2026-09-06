@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "VeloxCore", targets: ["VeloxCore"]),
         .executable(name: "VeloxApp", targets: ["VeloxApp"]),
         .executable(name: "VeloxExtension", targets: ["VeloxExtension"]),
+        .executable(name: "VeloxNetworkFilter", targets: ["VeloxNetworkFilter"]),
         .executable(name: "VeloxIntegrationTests", targets: ["VeloxIntegrationTests"]),
     ],
     targets: [
@@ -24,13 +25,31 @@ let package = Package(
             name: "VeloxApp",
             dependencies: ["VeloxCore"],
             path: "Sources/VeloxApp",
-            exclude: ["Info.plist", "VeloxMacDLP.entitlements"]
+            exclude: [
+                "Info.plist",
+                "VeloxMacDLP.entitlements",
+                "VeloxMacDLPDeveloperID.entitlements",
+            ]
         ),
         .executableTarget(
             name: "VeloxExtension",
             dependencies: ["VeloxCore"],
             path: "Sources/VeloxExtension",
             exclude: ["Info.plist", "VeloxMacDLPSE.entitlements"]
+        ),
+        .executableTarget(
+            name: "VeloxNetworkFilter",
+            dependencies: ["VeloxCore"],
+            path: "Sources/VeloxNetworkFilter",
+            exclude: [
+                "Info.plist",
+                "VeloxNetworkFilter.entitlements",
+                "VeloxNetworkFilterDeveloperID.entitlements",
+            ],
+            linkerSettings: [
+                .linkedFramework("NetworkExtension"),
+                .linkedLibrary("EndpointSecurity")
+            ]
         ),
         .testTarget(
             name: "VeloxCoreTests",

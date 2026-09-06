@@ -185,13 +185,19 @@ public struct WebUploadControlConfig: Codable, Sendable, Equatable {
 public struct USBStorageControlConfig: Codable, Sendable, Equatable {
     public let mode: PolicyMode
     public let blockExternalStorage: Bool
+    public let encryptionMode: PolicyMode
+    public let containerSizePercent: Int
 
     public init(
         mode: PolicyMode = .enforce,
-        blockExternalStorage: Bool = true
+        blockExternalStorage: Bool = true,
+        encryptionMode: PolicyMode = .disabled,
+        containerSizePercent: Int = 90
     ) {
         self.mode = mode
         self.blockExternalStorage = blockExternalStorage
+        self.encryptionMode = encryptionMode
+        self.containerSizePercent = containerSizePercent
     }
 
     public init(from decoder: Decoder) throws {
@@ -201,10 +207,28 @@ public struct USBStorageControlConfig: Codable, Sendable, Equatable {
             Bool.self,
             forKey: .blockExternalStorage
         ) ?? true
+        self.encryptionMode = try container.decodeIfPresent(
+            PolicyMode.self,
+            forKey: .encryptionMode
+        ) ?? .disabled
+        self.containerSizePercent = try container.decodeIfPresent(
+            Int.self,
+            forKey: .containerSizePercent
+        ) ?? 90
     }
 
     public func validate() throws {
-        // Enforced via enum decoding
+        guard (10...95).contains(containerSizePercent) else {
+            throw PolicyValidationError.invalidCriterion(
+                "usbStorageControl.containerSizePercent must be between 10 and 95"
+            )
+        }
+
+        guard encryptionMode == .disabled || mode != .enforce || !blockExternalStorage else {
+            throw PolicyValidationError.invalidCriterion(
+                "USB mount blocking and encrypted-container enforcement cannot both be enabled"
+            )
+        }
     }
 }
 
@@ -315,6 +339,220 @@ public struct ClipboardControlConfig: Codable, Sendable, Equatable {
     }
 }
 
+/// Controls physical printer queues managed by the local CUPS scheduler.
+///
+/// The first implementation blocks all configured printer queues. Content-aware
+/// classification and watermarking require a separately installed CUPS filter and
+/// are intentionally not represented as completed capabilities here.
+public struct PrinterControlConfig: Codable, Sendable, Equatable {
+    public let mode: PolicyMode
+    public let blockAllPrinters: Bool
+
+    public init(
+        mode: PolicyMode = .disabled,
+        blockAllPrinters: Bool = true
+    ) {
+        self.mode = mode
+        self.blockAllPrinters = blockAllPrinters
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decode(PolicyMode.self, forKey: .mode)
+        self.blockAllPrinters = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .blockAllPrinters
+        ) ?? true
+    }
+
+    public func validate() throws {
+        // Enforced by Codable enum and Boolean decoding.
+    }
+}
+
+public enum NetworkProtocol: String, Codable, Sendable, Equatable {
+    case any
+    case tcp
+    case udp
+}
+
+public enum NetworkDefaultAction: String, Codable, Sendable, Equatable {
+    case allow
+    case block
+}
+
+public struct NetworkDestinationRule: Codable, Sendable, Equatable {
+    public let ruleId: String
+    public let domain: String?
+    public let ipAddress: String?
+    public let cidrRange: String?
+    public let port: Int?
+    public let portRange: String?
+    public let `protocol`: NetworkProtocol
+    public let process: ApplicationRule?
+    public let action: String
+
+    public init(
+        ruleId: String,
+        domain: String? = nil,
+        ipAddress: String? = nil,
+        cidrRange: String? = nil,
+        port: Int? = nil,
+        portRange: String? = nil,
+        `protocol`: NetworkProtocol = .any,
+        process: ApplicationRule? = nil,
+        action: String = "block"
+    ) {
+        self.ruleId = ruleId
+        self.domain = domain
+        self.ipAddress = ipAddress
+        self.cidrRange = cidrRange
+        self.port = port
+        self.portRange = portRange
+        self.`protocol` = `protocol`
+        self.process = process
+        self.action = action.lowercased()
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.ruleId = try container.decode(String.self, forKey: .ruleId)
+        self.domain = try container.decodeIfPresent(String.self, forKey: .domain)
+        self.ipAddress = try container.decodeIfPresent(String.self, forKey: .ipAddress)
+        self.cidrRange = try container.decodeIfPresent(String.self, forKey: .cidrRange)
+        self.port = try container.decodeIfPresent(Int.self, forKey: .port)
+        self.portRange = try container.decodeIfPresent(String.self, forKey: .portRange)
+        self.`protocol` = try container.decodeIfPresent(NetworkProtocol.self, forKey: .`protocol`) ?? .any
+        self.process = try container.decodeIfPresent(ApplicationRule.self, forKey: .process)
+        self.action = (try container.decodeIfPresent(String.self, forKey: .action) ?? "block").lowercased()
+    }
+
+    public func validate() throws {
+        let trimmedRuleId = ruleId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedRuleId.isEmpty else {
+            throw PolicyValidationError.emptyRuleId("Rule ID cannot be empty")
+        }
+
+        guard action == "allow" || action == "block" else {
+            throw PolicyValidationError.invalidCriterion(
+                "action in rule '\(ruleId)' must be either 'allow' or 'block', got '\(action)'"
+            )
+        }
+
+        if let d = domain {
+            let trimmed = d.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                throw PolicyValidationError.emptyCriterion("domain in rule '\(ruleId)' cannot be empty")
+            }
+            guard !trimmed.contains(" ") else {
+                throw PolicyValidationError.invalidCriterion("domain in rule '\(ruleId)' cannot contain whitespace")
+            }
+        }
+
+        if let ip = ipAddress {
+            let trimmed = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                throw PolicyValidationError.emptyCriterion("ipAddress in rule '\(ruleId)' cannot be empty")
+            }
+            var sin = sockaddr_in()
+            var sin6 = sockaddr_in6()
+            let isV4 = inet_pton(AF_INET, trimmed, &sin.sin_addr) == 1
+            let isV6 = inet_pton(AF_INET6, trimmed, &sin6.sin6_addr) == 1
+            guard isV4 || isV6 else {
+                throw PolicyValidationError.invalidCriterion("ipAddress '\(trimmed)' in rule '\(ruleId)' is not a valid IPv4 or IPv6 address")
+            }
+        }
+
+        if let cidr = cidrRange {
+            let trimmed = cidr.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                throw PolicyValidationError.emptyCriterion("cidrRange in rule '\(ruleId)' cannot be empty")
+            }
+            let parts = trimmed.split(separator: "/", omittingEmptySubsequences: false)
+            guard parts.count == 2,
+                  let prefix = Int(parts[1]),
+                  !parts[0].isEmpty else {
+                throw PolicyValidationError.invalidCriterion("cidrRange '\(trimmed)' in rule '\(ruleId)' must be in format IP/prefix (e.g. 10.0.0.0/8)")
+            }
+            let ipPart = String(parts[0])
+            var sin = sockaddr_in()
+            var sin6 = sockaddr_in6()
+            let isV4 = inet_pton(AF_INET, ipPart, &sin.sin_addr) == 1
+            let isV6 = inet_pton(AF_INET6, ipPart, &sin6.sin6_addr) == 1
+            guard (isV4 && (0...32).contains(prefix)) || (isV6 && (0...128).contains(prefix)) else {
+                throw PolicyValidationError.invalidCriterion("cidrRange '\(trimmed)' in rule '\(ruleId)' has invalid IP or prefix range")
+            }
+        }
+
+        if let p = port {
+            guard (1...65535).contains(p) else {
+                throw PolicyValidationError.invalidCriterion("port in rule '\(ruleId)' must be between 1 and 65535, got \(p)")
+            }
+        }
+
+        if let pr = portRange {
+            let trimmed = pr.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                throw PolicyValidationError.emptyCriterion("portRange in rule '\(ruleId)' cannot be empty")
+            }
+            let parts = trimmed.split(separator: "-", omittingEmptySubsequences: false)
+            guard parts.count == 2,
+                  let start = Int(parts[0]),
+                  let end = Int(parts[1]),
+                  (1...65535).contains(start),
+                  (1...65535).contains(end),
+                  start <= end else {
+                throw PolicyValidationError.invalidCriterion("portRange '\(trimmed)' in rule '\(ruleId)' must be formatted as 'start-end' with 1 <= start <= end <= 65535")
+            }
+        }
+
+        let hasDestinationCriterion = domain != nil || ipAddress != nil || cidrRange != nil || port != nil || portRange != nil
+        let hasCriterion = hasDestinationCriterion || process != nil
+        guard hasCriterion else {
+            throw PolicyValidationError.missingCriterion("Network rule '\(ruleId)' must specify at least one destination criterion or process selector")
+        }
+
+        if let proc = process {
+            try proc.validate(isAllowRule: action == "allow")
+        }
+    }
+}
+
+public struct NetworkFlowControlConfig: Codable, Sendable, Equatable {
+    public let mode: PolicyMode
+    public let defaultAction: NetworkDefaultAction
+    public let rules: [NetworkDestinationRule]
+
+    public init(
+        mode: PolicyMode = .disabled,
+        defaultAction: NetworkDefaultAction = .allow,
+        rules: [NetworkDestinationRule] = []
+    ) {
+        self.mode = mode
+        self.defaultAction = defaultAction
+        self.rules = rules
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decode(PolicyMode.self, forKey: .mode)
+        self.defaultAction = try container.decodeIfPresent(NetworkDefaultAction.self, forKey: .defaultAction) ?? .allow
+        self.rules = try container.decodeIfPresent([NetworkDestinationRule].self, forKey: .rules) ?? []
+    }
+
+    public func validate() throws {
+        var seenRuleIds = Set<String>()
+        for rule in rules {
+            try rule.validate()
+            guard seenRuleIds.insert(rule.ruleId).inserted else {
+                throw PolicyValidationError.duplicateRuleId(
+                    "Duplicate networkFlowControl ruleId '\(rule.ruleId)' detected"
+                )
+            }
+        }
+    }
+}
+
 public struct VeloxPolicy: Codable, Sendable, Equatable {
     public let policyVersion: Int
     public let applicationControl: ApplicationControlConfig
@@ -322,6 +560,8 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
     public let usbStorageControl: USBStorageControlConfig
     public let nearbyTransferControl: NearbyTransferControlConfig
     public let clipboardControl: ClipboardControlConfig
+    public let printerControl: PrinterControlConfig
+    public let networkFlowControl: NetworkFlowControlConfig
 
     public init(
         policyVersion: Int,
@@ -329,7 +569,9 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         webUploadControl: WebUploadControlConfig = WebUploadControlConfig(),
         usbStorageControl: USBStorageControlConfig = USBStorageControlConfig(),
         nearbyTransferControl: NearbyTransferControlConfig = NearbyTransferControlConfig(),
-        clipboardControl: ClipboardControlConfig = ClipboardControlConfig()
+        clipboardControl: ClipboardControlConfig = ClipboardControlConfig(),
+        printerControl: PrinterControlConfig = PrinterControlConfig(),
+        networkFlowControl: NetworkFlowControlConfig = NetworkFlowControlConfig()
     ) {
         self.policyVersion = policyVersion
         self.applicationControl = applicationControl
@@ -337,6 +579,8 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         self.usbStorageControl = usbStorageControl
         self.nearbyTransferControl = nearbyTransferControl
         self.clipboardControl = clipboardControl
+        self.printerControl = printerControl
+        self.networkFlowControl = networkFlowControl
     }
 
     public init(from decoder: Decoder) throws {
@@ -359,6 +603,14 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             ClipboardControlConfig.self,
             forKey: .clipboardControl
         ) ?? ClipboardControlConfig()
+        self.printerControl = try container.decodeIfPresent(
+            PrinterControlConfig.self,
+            forKey: .printerControl
+        ) ?? PrinterControlConfig()
+        self.networkFlowControl = try container.decodeIfPresent(
+            NetworkFlowControlConfig.self,
+            forKey: .networkFlowControl
+        ) ?? NetworkFlowControlConfig()
     }
 
     /// Strictly parses and validates JSON data, rejecting any unknown properties or malformed fields.
@@ -374,7 +626,9 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             "webUploadControl",
             "usbStorageControl",
             "nearbyTransferControl",
-            "clipboardControl"
+            "clipboardControl",
+            "printerControl",
+            "networkFlowControl"
         ]
         for key in jsonObject.keys {
             if !validTopKeys.contains(key) {
@@ -432,7 +686,12 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         }
 
         if let usbStorageObj = jsonObject["usbStorageControl"] as? [String: Any] {
-            let validUsbKeys: Set<String> = ["mode", "blockExternalStorage"]
+            let validUsbKeys: Set<String> = [
+                "mode",
+                "blockExternalStorage",
+                "encryptionMode",
+                "containerSizePercent"
+            ]
             for key in usbStorageObj.keys {
                 if !validUsbKeys.contains(key) {
                     throw PolicyValidationError.unknownProperty(
@@ -481,6 +740,54 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             }
         }
 
+        if let printerObj = jsonObject["printerControl"] as? [String: Any] {
+            let validPrinterKeys: Set<String> = ["mode", "blockAllPrinters"]
+            for key in printerObj.keys {
+                if !validPrinterKeys.contains(key) {
+                    throw PolicyValidationError.unknownProperty(
+                        "Unknown property '\(key)' in printerControl"
+                    )
+                }
+            }
+        }
+
+        if let networkFlowObj = jsonObject["networkFlowControl"] as? [String: Any] {
+            let validNetworkFlowKeys: Set<String> = ["mode", "defaultAction", "rules"]
+            for key in networkFlowObj.keys {
+                if !validNetworkFlowKeys.contains(key) {
+                    throw PolicyValidationError.unknownProperty(
+                        "Unknown property '\(key)' in networkFlowControl"
+                    )
+                }
+            }
+
+            if let rulesList = networkFlowObj["rules"] as? [[String: Any]] {
+                let validNetworkRuleKeys: Set<String> = [
+                    "ruleId", "domain", "ipAddress", "cidrRange",
+                    "port", "portRange", "protocol", "process", "action"
+                ]
+                for ruleDict in rulesList {
+                    for key in ruleDict.keys {
+                        if !validNetworkRuleKeys.contains(key) {
+                            throw PolicyValidationError.unknownProperty(
+                                "Unknown property '\(key)' in networkFlowControl rule"
+                            )
+                        }
+                    }
+
+                    if let processDict = ruleDict["process"] as? [String: Any] {
+                        for key in processDict.keys {
+                            if !validRuleKeys.contains(key) {
+                                throw PolicyValidationError.unknownProperty(
+                                    "Unknown property '\(key)' in networkFlowControl rule process"
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let policy = try JSONDecoder().decode(VeloxPolicy.self, from: data)
         try policy.validate()
         return policy
@@ -495,6 +802,8 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         try usbStorageControl.validate()
         try nearbyTransferControl.validate()
         try clipboardControl.validate()
+        try printerControl.validate()
+        try networkFlowControl.validate()
 
         var seenRuleIds = Set<String>()
         for rule in applicationControl.allowedApplications {

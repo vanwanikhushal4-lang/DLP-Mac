@@ -459,6 +459,23 @@ public final class PolicyEngine: @unchecked Sendable {
             )
         }
 
+        // Encrypted-container mode must allow the physical device to mount so
+        // the privileged coordinator can provision and attach its AES-256
+        // sparse bundle. Plaintext writes to this outer mount are authorized
+        // separately by USBEncryptionAccessController.
+        if config.encryptionMode != .disabled {
+            return USBMountDecision(
+                decisionString: config.encryptionMode == .auditOnly ? "would-encrypt" : "allowed",
+                shouldAllowMount: true,
+                isUSBMountCandidate: true,
+                matchingRuleId: config.encryptionMode == .auditOnly
+                    ? "usb-encryption-container-audit"
+                    : "usb-encryption-container-required",
+                policyVersion: version,
+                dispositionString: dispositionStr
+            )
+        }
+
         guard mode != .disabled, config.blockExternalStorage else {
             return USBMountDecision(
                 decisionString: "allowed",
@@ -648,6 +665,190 @@ public final class PolicyEngine: @unchecked Sendable {
         if let rulePrefix = rule.executablePathPrefix {
             let prefixWithSlash = rulePrefix.hasSuffix("/") ? rulePrefix : rulePrefix + "/"
             guard process.executablePath == rulePrefix || process.executablePath.hasPrefix(prefixWithSlash) else {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    /// Evaluates an outbound network flow against active Network Flow Control policies.
+    /// Fail-open: unexpected errors or disabled state return an allowed decision.
+    public func evaluateNetworkFlow(_ context: NetworkFlowContext) -> NetworkFlowDecision {
+        os_unfair_lock_lock(lock)
+        let policy = self.activePolicy
+        os_unfair_lock_unlock(lock)
+
+        let version = policy.policyVersion
+        let config = policy.networkFlowControl
+        let mode = config.mode
+
+        // 1. Critical System Guardian Check (Fail-Safe: Never block authentic macOS daemons or authentic Velox binaries)
+        if SecurityGuardian.isCriticalProcess(
+            signingId: context.process.signingId,
+            teamId: context.process.teamId,
+            executablePath: context.process.executablePath,
+            isPlatformBinary: context.process.isPlatformBinary,
+            codesigningFlags: context.process.codesigningFlags
+        ) {
+            return NetworkFlowDecision(
+                decisionString: "allowed",
+                shouldAllowFlow: true,
+                matchingRuleId: nil,
+                policyVersion: version
+            )
+        }
+
+        // 2. Direction check - only inspect outbound connections
+        guard context.isOutbound else {
+            return NetworkFlowDecision(
+                decisionString: "allowed",
+                shouldAllowFlow: true,
+                matchingRuleId: nil,
+                policyVersion: version
+            )
+        }
+
+        // A default-block policy must never turn an attribution failure into a
+        // system-wide outage. If NetworkExtension cannot identify the source
+        // process at all, fail open and wait for a future fully attributed flow.
+        guard context.process.pid > 0,
+              context.process.executablePath != "unknown" else {
+            return NetworkFlowDecision(
+                decisionString: "allowed",
+                shouldAllowFlow: true,
+                matchingRuleId: nil,
+                policyVersion: version
+            )
+        }
+
+        // 3. Disabled mode
+        if mode == .disabled {
+            return NetworkFlowDecision(
+                decisionString: "allowed",
+                shouldAllowFlow: true,
+                matchingRuleId: nil,
+                policyVersion: version
+            )
+        }
+
+        // 4. Evaluate Explicit Rules: Allow rules take absolute precedence over Block rules
+        let allowRules = config.rules.filter { $0.action == "allow" }
+        for rule in allowRules {
+            if matchesNetworkRule(rule, context: context) {
+                return NetworkFlowDecision(
+                    decisionString: "allowed",
+                    shouldAllowFlow: true,
+                    matchingRuleId: rule.ruleId,
+                    policyVersion: version
+                )
+            }
+        }
+
+        let blockRules = config.rules.filter { $0.action == "block" }
+        for rule in blockRules {
+            if matchesNetworkRule(rule, context: context) {
+                switch mode {
+                case .enforce:
+                    return NetworkFlowDecision(
+                        decisionString: "blocked",
+                        shouldAllowFlow: false,
+                        matchingRuleId: rule.ruleId,
+                        policyVersion: version
+                    )
+                case .auditOnly:
+                    return NetworkFlowDecision(
+                        decisionString: "would-block",
+                        shouldAllowFlow: true,
+                        matchingRuleId: rule.ruleId,
+                        policyVersion: version
+                    )
+                case .disabled:
+                    break
+                }
+            }
+        }
+
+        // 5. Default Action if no explicit rule matched
+        switch config.defaultAction {
+        case .allow:
+            return NetworkFlowDecision(
+                decisionString: "allowed",
+                shouldAllowFlow: true,
+                matchingRuleId: nil,
+                policyVersion: version
+            )
+        case .block:
+            switch mode {
+            case .enforce:
+                return NetworkFlowDecision(
+                    decisionString: "blocked",
+                    shouldAllowFlow: false,
+                    matchingRuleId: "network-flow-default-block",
+                    policyVersion: version
+                )
+            case .auditOnly:
+                return NetworkFlowDecision(
+                    decisionString: "would-block",
+                    shouldAllowFlow: true,
+                    matchingRuleId: "network-flow-default-block",
+                    policyVersion: version
+                )
+            case .disabled:
+                return NetworkFlowDecision(
+                    decisionString: "allowed",
+                    shouldAllowFlow: true,
+                    matchingRuleId: nil,
+                    policyVersion: version
+                )
+            }
+        }
+    }
+
+    private func matchesNetworkRule(_ rule: NetworkDestinationRule, context: NetworkFlowContext) -> Bool {
+        // Match process if specified
+        if let procRule = rule.process {
+            guard matches(rule: procRule, process: context.process) else {
+                return false
+            }
+        }
+
+        // Match protocol if specified
+        guard NetworkMatcher.matchesProtocol(ruleProtocol: rule.protocol, flowProtocol: context.networkProtocol) else {
+            return false
+        }
+
+        // Match port / port range if specified
+        if rule.port != nil || rule.portRange != nil {
+            guard NetworkMatcher.matchesPort(singlePort: rule.port, portRange: rule.portRange, flowPort: context.remotePort) else {
+                return false
+            }
+        }
+
+        // Match destination address / domain if specified
+        let hasHostOrIPRule = rule.domain != nil || rule.ipAddress != nil || rule.cidrRange != nil
+        if hasHostOrIPRule {
+            var matchedDestination = false
+
+            if let domainPattern = rule.domain, let host = context.remoteHostname {
+                if NetworkMatcher.matchesDomain(pattern: domainPattern, hostname: host) {
+                    matchedDestination = true
+                }
+            }
+
+            if !matchedDestination, let ruleIP = rule.ipAddress, let flowIP = context.remoteAddress {
+                if NetworkMatcher.matchesIP(ruleIP: ruleIP, flowIP: flowIP) {
+                    matchedDestination = true
+                }
+            }
+
+            if !matchedDestination, let cidr = rule.cidrRange, let flowIP = context.remoteAddress {
+                if NetworkMatcher.matchesCIDR(cidr: cidr, flowIP: flowIP) {
+                    matchedDestination = true
+                }
+            }
+
+            guard matchedDestination else {
                 return false
             }
         }

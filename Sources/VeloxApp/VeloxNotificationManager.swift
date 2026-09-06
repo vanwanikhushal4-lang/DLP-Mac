@@ -22,6 +22,10 @@ public final class VeloxNotificationManager: NSObject, VeloxClientProtocol, UNUs
 
     /// Requests user authorization for alert banners and sounds, and sets delegate.
     public func requestAuthorization() {
+        guard Bundle.main.bundleIdentifier != nil else {
+            logger.info("Running unbundled, skipping UNUserNotificationCenter initialization.")
+            return
+        }
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
@@ -89,7 +93,7 @@ public final class VeloxNotificationManager: NSObject, VeloxClientProtocol, UNUs
         )
 
         // Deliver exactly one native macOS system notification
-        if isAuthorized {
+        if isAuthorized && Bundle.main.bundleIdentifier != nil {
             let content = UNMutableNotificationContent()
             content.title = formatted.title
             content.subtitle = formatted.subtitle

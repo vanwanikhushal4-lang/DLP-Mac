@@ -43,7 +43,7 @@ Use a signed build with the Endpoint Security system extension approved and acti
 Inspect the local evidence stream with:
 
 ```sh
-tail -f "/Library/Application Support/VeloxMacDLP/events.jsonl"
+tail -f "/Library/Logs/VeloxMacDLP/events.jsonl"
 ```
 
 ## Production boundary

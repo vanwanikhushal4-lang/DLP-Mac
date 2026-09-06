@@ -71,6 +71,38 @@ final class VeloxNotificationTests: XCTestCase {
         XCTAssertEqual(formatted.body, "External storage 'BACKUP_DRIVE' was blocked from mounting.")
     }
 
+    func testUSBEncryptionNotificationFormatting() {
+        let formatted = VeloxNotificationFormatter.format(
+            module: "usb-encryption-control",
+            action: "plaintext-create",
+            target: "/Volumes/CLIENT_USB",
+            detail: ""
+        )
+
+        XCTAssertEqual(formatted.title, "Blocked by Velox DLP")
+        XCTAssertEqual(formatted.subtitle, "USB Encryption Required")
+        XCTAssertEqual(
+            formatted.body,
+            "A plaintext copy to 'CLIENT_USB' was blocked. Copy into Velox Secure USB instead."
+        )
+    }
+
+    func testPrinterControlNotificationFormatting() {
+        let formatted = VeloxNotificationFormatter.format(
+            module: "printer-control",
+            action: "queue-disabled",
+            target: "Office-HP",
+            detail: "com.apple.cupsd"
+        )
+
+        XCTAssertEqual(formatted.title, "Blocked by Velox DLP")
+        XCTAssertEqual(formatted.subtitle, "Printing Blocked")
+        XCTAssertEqual(
+            formatted.body,
+            "Printing to printer 'Office-HP' was blocked by security policy."
+        )
+    }
+
     func testNearbyTransferNotificationFormatting() {
         let airDrop = VeloxNotificationFormatter.format(
             module: "nearby-transfer-control",

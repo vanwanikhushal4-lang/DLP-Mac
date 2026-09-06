@@ -9,6 +9,36 @@ final class BundledWebSchemeHandler: NSObject, WKURLSchemeHandler {
     private let resourceRoot: URL
 
     init?(bundle: Bundle = .main) {
+        if let envPath = ProcessInfo.processInfo.environment["VELOX_WEB_DIST_PATH"],
+           FileManager.default.fileExists(atPath: envPath) {
+            self.resourceRoot = URL(fileURLWithPath: envPath, isDirectory: true).standardizedFileURL
+            return
+        }
+
+        if let root = bundle.resourceURL?.appendingPathComponent("dist", isDirectory: true),
+           FileManager.default.fileExists(atPath: root.path) {
+            self.resourceRoot = root.standardizedFileURL
+            return
+        }
+
+        let appResourceRoot = bundle.bundleURL.appendingPathComponent("Contents/Resources/dist", isDirectory: true)
+        if FileManager.default.fileExists(atPath: appResourceRoot.path) {
+            self.resourceRoot = appResourceRoot.standardizedFileURL
+            return
+        }
+
+        let devDist = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("Web/dist", isDirectory: true)
+        if FileManager.default.fileExists(atPath: devDist.path) {
+            self.resourceRoot = devDist.standardizedFileURL
+            return
+        }
+
+        let relativeDevDist = bundle.bundleURL.appendingPathComponent("Web/dist", isDirectory: true)
+        if FileManager.default.fileExists(atPath: relativeDevDist.path) {
+            self.resourceRoot = relativeDevDist.standardizedFileURL
+            return
+        }
+
         guard let root = bundle.resourceURL?.appendingPathComponent("dist", isDirectory: true) else {
             return nil
         }

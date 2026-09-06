@@ -47,7 +47,8 @@ public struct SecurityGuardian: Sendable {
     /// Velox Mac DLP signing IDs that are eligible for self-protection
     public static let selfSigningIdentifiers: Set<String> = [
         "co.velox.macdlp",
-        "co.velox.macdlp.endpointsecurity"
+        "co.velox.macdlp.endpointsecurity",
+        "co.velox.macdlp.networkfilter"
     ]
 
     /// Returns true if the target process is cryptographically verified as an essential

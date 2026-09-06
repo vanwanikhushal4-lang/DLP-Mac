@@ -30,12 +30,14 @@ targets:
     sources:
       - path: Sources/VeloxExtension/main.swift
       - path: Sources/VeloxExtension/ControlService.swift
+      - path: Sources/VeloxExtension/PrinterControlCoordinator.swift
+      - path: Sources/VeloxExtension/USBEncryptionCoordinator.swift
     info:
       path: Sources/VeloxExtension/Info.plist
       properties:
         CFBundlePackageType: SYSX
-        CFBundleShortVersionString: "1.5.0"
-        CFBundleVersion: "10"
+        CFBundleShortVersionString: "1.8.2"
+        CFBundleVersion: "17"
         NSSystemExtensionUsageDescription: Velox Mac DLP monitors and controls application execution to enforce organizational security policy.
         NSEndpointSecurityMachServiceName: L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc
     entitlements:
@@ -71,8 +73,8 @@ targets:
       path: Sources/VeloxSafariUploadGuard/Info.plist
       properties:
         CFBundleDisplayName: Velox DLP Upload Guard
-        CFBundleShortVersionString: "1.5.0"
-        CFBundleVersion: "10"
+        CFBundleShortVersionString: "1.8.2"
+        CFBundleVersion: "17"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.Safari.web-extension
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
@@ -93,6 +95,45 @@ targets:
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
 
+  VeloxNetworkFilter:
+    type: system-extension
+    platform: macOS
+    sources:
+      - path: Sources/VeloxNetworkFilter/main.swift
+      - path: Sources/VeloxNetworkFilter/FilterDataProvider.swift
+      - path: Sources/VeloxNetworkFilter/NetworkEventService.swift
+    info:
+      path: Sources/VeloxNetworkFilter/Info.plist
+      properties:
+        CFBundlePackageType: SYSX
+        CFBundleShortVersionString: "1.8.2"
+        CFBundleVersion: "17"
+        NSSystemExtensionUsageDescription: Velox Mac DLP monitors and filters outbound network flow connections according to organizational security policy.
+        NetworkExtension:
+          NEMachServiceName: $(TeamIdentifierPrefix)co.velox.macdlp.networkfilter.xpc
+          NEProviderClasses:
+            com.apple.networkextension.filter-data: $(PRODUCT_MODULE_NAME).FilterDataProvider
+    entitlements:
+      path: Sources/VeloxNetworkFilter/VeloxNetworkFilter.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - content-filter-provider
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)co.velox.macdlp
+    dependencies:
+      - target: VeloxCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp.networkfilter
+        PRODUCT_NAME: co.velox.macdlp.networkfilter
+        WRAPPER_EXTENSION: systemextension
+        CODE_SIGN_STYLE: "Automatic"
+        CODE_SIGN_ENTITLEMENTS: Sources/VeloxNetworkFilter/VeloxNetworkFilter.entitlements
+        DEVELOPMENT_TEAM: "L7US4BH7Q2"
+        ENABLE_HARDENED_RUNTIME: YES
+        OTHER_LDFLAGS: ["$(inherited)", "-framework", "NetworkExtension", "-lEndpointSecurity"]
+
   VeloxMacDLP:
     type: application
     platform: macOS
@@ -106,25 +147,35 @@ targets:
       - path: Sources/VeloxApp/PasteboardMonitor.swift
       - path: Sources/VeloxApp/VeloxNotificationManager.swift
       - path: Sources/VeloxApp/VeloxActiveEventMonitor.swift
+      - path: Sources/VeloxApp/VeloxNetworkEventClient.swift
       - path: Web/dist
         type: folder
         buildPhase: resources
     info:
       path: Sources/VeloxApp/Info.plist
       properties:
-        CFBundleShortVersionString: "1.5.0"
-        CFBundleVersion: "10"
+        CFBundleShortVersionString: "1.8.2"
+        CFBundleVersion: "17"
         LSUIElement: true
         SBAppUsesLocalNotifications: true
         NSUserNotificationAlertStyle: alert
-        NSSystemExtensionUsageDescription: Velox Mac DLP installs an Endpoint Security system extension to enforce application-control policy.
+        NSSystemExtensionUsageDescription: Velox Mac DLP installs security and network-filter system extensions to enforce organizational data-loss-prevention policy.
     entitlements:
       path: Sources/VeloxApp/VeloxMacDLP.entitlements
       properties:
+        com.apple.developer.networking.networkextension:
+          - content-filter-provider
         com.apple.developer.system-extension.install: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)co.velox.macdlp
     dependencies:
       - target: VeloxCore
       - target: VeloxExtension
+        embed: true
+        destination: custom
+        subpath: Contents/Library/SystemExtensions
+        codeSign: true
+      - target: VeloxNetworkFilter
         embed: true
         destination: custom
         subpath: Contents/Library/SystemExtensions

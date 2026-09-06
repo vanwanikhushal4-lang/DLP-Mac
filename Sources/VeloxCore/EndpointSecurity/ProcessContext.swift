@@ -15,18 +15,19 @@ public struct ProcessContext: Sendable, Equatable {
 
     public init(
         pid: pid_t,
-        parentPid: pid_t,
-        uid: uid_t,
-        signingId: String?,
-        teamId: String?,
-        isPlatformBinary: Bool,
-        cdhash: String?,
+        parentPid: pid_t = 0,
+        ppid: pid_t? = nil,
+        uid: uid_t = 0,
+        signingId: String? = nil,
+        teamId: String? = nil,
+        isPlatformBinary: Bool = false,
+        cdhash: String? = nil,
         executablePath: String,
         codesigningFlags: UInt32 = 0,
         isESClient: Bool = false
     ) {
         self.pid = pid
-        self.parentPid = parentPid
+        self.parentPid = ppid ?? parentPid
         self.uid = uid
         self.signingId = signingId
         self.teamId = teamId

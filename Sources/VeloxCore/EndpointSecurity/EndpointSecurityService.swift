@@ -39,6 +39,7 @@ public final class EndpointSecurityService: @unchecked Sendable {
     private let policyEngine: PolicyEngine
     private let logger: EventLogger
     private let healthPath: String
+    private let usbEncryptionAccessController: USBEncryptionAccessController
 
     private let stateLock = os_unfair_lock_t.allocate(capacity: 1)
     private var isRunning: Bool = false
@@ -47,6 +48,7 @@ public final class EndpointSecurityService: @unchecked Sendable {
     private var lastError: String? = nil
     private var startTimeString: String = ""
     private var eventBlockedHandler: (@Sendable (ExecutionEvent) -> Void)?
+    private var volumeTopologyChangedHandler: (@Sendable () -> Void)?
 
     public var onEventBlocked: (@Sendable (ExecutionEvent) -> Void)? {
         get {
@@ -61,6 +63,19 @@ public final class EndpointSecurityService: @unchecked Sendable {
         }
     }
 
+    public var onVolumeTopologyChanged: (@Sendable () -> Void)? {
+        get {
+            os_unfair_lock_lock(stateLock)
+            defer { os_unfair_lock_unlock(stateLock) }
+            return volumeTopologyChangedHandler
+        }
+        set {
+            os_unfair_lock_lock(stateLock)
+            volumeTopologyChangedHandler = newValue
+            os_unfair_lock_unlock(stateLock)
+        }
+    }
+
     private func notifyBlockedIfHandlerPresent(_ event: ExecutionEvent) {
         os_unfair_lock_lock(stateLock)
         let handler = eventBlockedHandler
@@ -71,10 +86,12 @@ public final class EndpointSecurityService: @unchecked Sendable {
     public init(
         policyEngine: PolicyEngine,
         logger: EventLogger,
+        usbEncryptionAccessController: USBEncryptionAccessController = USBEncryptionAccessController(),
         healthPath: String = "/Library/Application Support/VeloxMacDLP/health.json"
     ) {
         self.policyEngine = policyEngine
         self.logger = logger
+        self.usbEncryptionAccessController = usbEncryptionAccessController
         self.healthPath = healthPath
         self.stateLock.initialize(to: os_unfair_lock())
     }
@@ -121,6 +138,7 @@ public final class EndpointSecurityService: @unchecked Sendable {
             if let strongSelf = self {
                 strongSelf.handleMessage(client: esClient, message: messagePointer)
             } else {
+                guard messagePointer.pointee.action_type == ES_ACTION_TYPE_AUTH else { return }
                 // Fail-safe guaranteed response: Never leave kernel waiting. AUTH_OPEN
                 // is the sole ES auth event that requires a flags response.
                 if messagePointer.pointee.event_type == ES_EVENT_TYPE_AUTH_OPEN {
@@ -139,14 +157,18 @@ public final class EndpointSecurityService: @unchecked Sendable {
             self.startTimeString = formatter.string(from: Date())
 
             // AUTH_EXEC enforces application control.
-            // AUTH_OPEN enforces web upload control.
+            // AUTH_OPEN enforces web upload and USB encrypted-container writes.
+            // AUTH_CREATE/AUTH_COPYFILE prevent plaintext creation on managed USB volumes.
             // AUTH_MOUNT & AUTH_REMOUNT enforce USB / removable media protection.
-            // NOTIFY_UNMOUNT audits removable device disconnects.
+            // Mount notifications trigger encrypted-container reconciliation.
             var events = [
                 ES_EVENT_TYPE_AUTH_EXEC,
                 ES_EVENT_TYPE_AUTH_OPEN,
+                ES_EVENT_TYPE_AUTH_CREATE,
+                ES_EVENT_TYPE_AUTH_COPYFILE,
                 ES_EVENT_TYPE_AUTH_MOUNT,
                 ES_EVENT_TYPE_AUTH_REMOUNT,
+                ES_EVENT_TYPE_NOTIFY_MOUNT,
                 ES_EVENT_TYPE_NOTIFY_UNMOUNT
             ]
             let subResult = es_subscribe(newClient!, &events, UInt32(events.count))
@@ -198,7 +220,13 @@ public final class EndpointSecurityService: @unchecked Sendable {
     /// 5. Async log dispatch prevents disk latency in the kernel thread.
     public func handleMessage(client: OpaquePointer, message: UnsafePointer<es_message_t>) {
         let msg = message.pointee
-        guard msg.action_type == ES_ACTION_TYPE_AUTH else {
+        if msg.action_type != ES_ACTION_TYPE_AUTH {
+            if msg.event_type == ES_EVENT_TYPE_NOTIFY_MOUNT {
+                notifyVolumeTopologyChanged()
+            } else if msg.event_type == ES_EVENT_TYPE_NOTIFY_UNMOUNT {
+                handleUnmountMessage(message: message)
+                notifyVolumeTopologyChanged()
+            }
             return
         }
 
@@ -264,6 +292,18 @@ public final class EndpointSecurityService: @unchecked Sendable {
                 message: message,
                 startNs: startNs
             )
+        } else if msg.event_type == ES_EVENT_TYPE_AUTH_CREATE {
+            handleCreateMessage(
+                client: client,
+                message: message,
+                startNs: startNs
+            )
+        } else if msg.event_type == ES_EVENT_TYPE_AUTH_COPYFILE {
+            handleCopyFileMessage(
+                client: client,
+                message: message,
+                startNs: startNs
+            )
         } else if msg.event_type == ES_EVENT_TYPE_AUTH_MOUNT {
             handleMountMessage(
                 client: client,
@@ -275,10 +315,6 @@ public final class EndpointSecurityService: @unchecked Sendable {
                 client: client,
                 message: message,
                 startNs: startNs
-            )
-        } else if msg.event_type == ES_EVENT_TYPE_NOTIFY_UNMOUNT {
-            handleUnmountMessage(
-                message: message
             )
         } else {
             // Guarantee: always respond to any other unhandled AUTH event with ALLOW
@@ -302,6 +338,22 @@ public final class EndpointSecurityService: @unchecked Sendable {
         let requestedFlags = UInt32(bitPattern: msg.event.open.fflag)
         let fileType = file.stat.st_mode & mode_t(S_IFMT)
         let isRegularFile = fileType == mode_t(S_IFREG)
+
+        if let usbDecision = usbEncryptionAccessController.evaluateOpen(
+            process: process,
+            filePath: filePath,
+            requestedFlags: requestedFlags
+        ) {
+            respondToUSBEncryptionMutation(
+                client: client,
+                message: message,
+                process: process,
+                decision: usbDecision,
+                startNs: startNs,
+                usesOpenFlagsResponse: true
+            )
+            return
+        }
 
         let nearbyDecision = policyEngine.evaluateNearbyTransferOpen(
             process: process,
@@ -401,6 +453,143 @@ public final class EndpointSecurityService: @unchecked Sendable {
         if decision.decisionString == "blocked" {
             notifyBlockedIfHandlerPresent(event)
         }
+    }
+
+    private func handleCreateMessage(
+        client: OpaquePointer,
+        message: UnsafePointer<es_message_t>,
+        startNs: UInt64
+    ) {
+        let msg = message.pointee
+        let create = msg.event.create
+        let destinationPath: String
+        switch create.destination_type {
+        case ES_DESTINATION_TYPE_EXISTING_FILE:
+            destinationPath = stringFromToken(create.destination.existing_file.pointee.path) ?? ""
+        case ES_DESTINATION_TYPE_NEW_PATH:
+            let directory = stringFromToken(create.destination.new_path.dir.pointee.path) ?? ""
+            let filename = stringFromToken(create.destination.new_path.filename) ?? ""
+            destinationPath = (directory as NSString).appendingPathComponent(filename)
+        default:
+            destinationPath = ""
+        }
+
+        let process = extractProcessContext(target: msg.process.pointee)
+        guard let decision = usbEncryptionAccessController.evaluateMutation(
+            process: process,
+            destinationPath: destinationPath,
+            operation: .create
+        ) else {
+            _ = es_respond_auth_result(client, message, ES_AUTH_RESULT_ALLOW, false)
+            return
+        }
+        respondToUSBEncryptionMutation(
+            client: client,
+            message: message,
+            process: process,
+            decision: decision,
+            startNs: startNs,
+            usesOpenFlagsResponse: false
+        )
+    }
+
+    private func handleCopyFileMessage(
+        client: OpaquePointer,
+        message: UnsafePointer<es_message_t>,
+        startNs: UInt64
+    ) {
+        let msg = message.pointee
+        let copy = msg.event.copyfile
+        let destinationPath: String
+        if let target = copy.target_file {
+            destinationPath = stringFromToken(target.pointee.path) ?? ""
+        } else {
+            let directory = stringFromToken(copy.target_dir.pointee.path) ?? ""
+            let filename = stringFromToken(copy.target_name) ?? ""
+            destinationPath = (directory as NSString).appendingPathComponent(filename)
+        }
+
+        let process = extractProcessContext(target: msg.process.pointee)
+        guard let decision = usbEncryptionAccessController.evaluateMutation(
+            process: process,
+            destinationPath: destinationPath,
+            operation: .copyFile
+        ) else {
+            _ = es_respond_auth_result(client, message, ES_AUTH_RESULT_ALLOW, false)
+            return
+        }
+        respondToUSBEncryptionMutation(
+            client: client,
+            message: message,
+            process: process,
+            decision: decision,
+            startNs: startNs,
+            usesOpenFlagsResponse: false
+        )
+    }
+
+    private func respondToUSBEncryptionMutation(
+        client: OpaquePointer,
+        message: UnsafePointer<es_message_t>,
+        process: ProcessContext,
+        decision: USBEncryptionWriteDecision,
+        startNs: UInt64,
+        usesOpenFlagsResponse: Bool
+    ) {
+        let response: es_respond_result_t
+        if usesOpenFlagsResponse {
+            response = es_respond_flags_result(
+                client,
+                message,
+                decision.shouldAllow ? UInt32.max : 0,
+                false
+            )
+        } else {
+            response = es_respond_auth_result(
+                client,
+                message,
+                decision.shouldAllow ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY,
+                false
+            )
+        }
+        let responseStatus = response == ES_RESPOND_RESULT_SUCCESS
+            ? "success"
+            : "failed_code_\(response.rawValue)"
+        let latencyMicros = max(1, UInt64((DispatchTime.now().uptimeNanoseconds - startNs) / 1_000))
+        let event = ExecutionEvent(
+            module: "usb-encryption-control",
+            action: decision.operation.rawValue,
+            decision: decision.decisionString,
+            ruleId: decision.matchingRuleId,
+            policyVersion: decision.policyVersion,
+            executablePath: process.executablePath,
+            signingId: process.signingId,
+            teamId: process.teamId,
+            pid: process.pid,
+            parentPid: process.parentPid,
+            uid: process.uid,
+            decisionLatencyMicros: latencyMicros,
+            authResponseResult: responseStatus,
+            resourcePath: decision.volumeMountPath,
+            interaction: "encrypted-container-required"
+        )
+        logger.logEventAsync(event)
+        if decision.decisionString == "blocked" && response == ES_RESPOND_RESULT_SUCCESS {
+            notifyBlockedIfHandlerPresent(event)
+        }
+        if response != ES_RESPOND_RESULT_SUCCESS {
+            fputs(
+                "[VeloxEndpointSecurityService] CRITICAL: USB encryption response failed: \(response.rawValue)\n",
+                stderr
+            )
+        }
+    }
+
+    private func notifyVolumeTopologyChanged() {
+        os_unfair_lock_lock(stateLock)
+        let handler = volumeTopologyChangedHandler
+        os_unfair_lock_unlock(stateLock)
+        handler?()
     }
 
     private func handleMountMessage(
@@ -625,8 +814,11 @@ public final class EndpointSecurityService: @unchecked Sendable {
             subscribedEvents: [
                 "ES_EVENT_TYPE_AUTH_EXEC",
                 "ES_EVENT_TYPE_AUTH_OPEN",
+                "ES_EVENT_TYPE_AUTH_CREATE",
+                "ES_EVENT_TYPE_AUTH_COPYFILE",
                 "ES_EVENT_TYPE_AUTH_MOUNT",
                 "ES_EVENT_TYPE_AUTH_REMOUNT",
+                "ES_EVENT_TYPE_NOTIFY_MOUNT",
                 "ES_EVENT_TYPE_NOTIFY_UNMOUNT"
             ],
             lastError: error,

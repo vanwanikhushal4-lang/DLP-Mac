@@ -663,6 +663,40 @@ final class PolicyEngineTests: XCTestCase {
         XCTAssertEqual(policy.policyVersion, 22)
         XCTAssertEqual(policy.usbStorageControl.mode, .enforce)
         XCTAssertTrue(policy.usbStorageControl.blockExternalStorage)
+        XCTAssertEqual(policy.usbStorageControl.encryptionMode, .disabled)
+        XCTAssertEqual(policy.usbStorageControl.containerSizePercent, 90)
+    }
+
+    func testUSBEncryptionModeAllowsExternalMountForContainerProvisioning() {
+        let policy = VeloxPolicy(
+            policyVersion: 23,
+            applicationControl: ApplicationControlConfig(mode: .enforce),
+            usbStorageControl: USBStorageControlConfig(
+                mode: .disabled,
+                blockExternalStorage: true,
+                encryptionMode: .enforce,
+                containerSizePercent: 80
+            )
+        )
+        let engine = PolicyEngine(policy: policy)
+        let diskarbitrationd = ProcessContext(
+            pid: 100, parentPid: 1, uid: 0,
+            signingId: "com.apple.diskarbitrationd", teamId: nil,
+            isPlatformBinary: true, cdhash: nil,
+            executablePath: "/usr/libexec/diskarbitrationd"
+        )
+        let decision = engine.evaluateMount(
+            process: diskarbitrationd,
+            mountFrom: "/dev/disk7s1",
+            mountPoint: "/Volumes/CLIENT_USB",
+            fsType: "exfat",
+            disposition: ES_MOUNT_DISPOSITION_EXTERNAL
+        )
+
+        XCTAssertTrue(decision.shouldAllowMount)
+        XCTAssertTrue(decision.isUSBMountCandidate)
+        XCTAssertEqual(decision.decisionString, "allowed")
+        XCTAssertEqual(decision.matchingRuleId, "usb-encryption-container-required")
     }
 
     func testNearbyTransferBlocksProtectedFileReadBySharingd() {

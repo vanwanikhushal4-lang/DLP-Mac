@@ -17,6 +17,12 @@
       "Downloads"
     ]
   },
+  "usbStorageControl": {
+    "mode": "disabled",
+    "blockExternalStorage": true,
+    "encryptionMode": "audit-only",
+    "containerSizePercent": 90
+  },
   "nearbyTransferControl": {
     "mode": "audit-only",
     "blockAirDrop": true,
@@ -30,5 +36,22 @@
   "clipboardControl": {
     "mode": "disabled",
     "blockedApplications": []
+  },
+  "printerControl": {
+    "mode": "audit-only",
+    "blockAllPrinters": true
+  },
+  "networkFlowControl": {
+    "mode": "audit-only",
+    "defaultAction": "allow",
+    "rules": [
+      {
+        "ruleId": "audit-suspicious-exfil",
+        "domain": "transfer.sh",
+        "port": 443,
+        "protocol": "tcp",
+        "action": "block"
+      }
+    ]
   }
 }

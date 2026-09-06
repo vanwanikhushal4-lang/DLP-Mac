@@ -41,6 +41,9 @@ final class PolicyManagerTests: XCTestCase {
         XCTAssertEqual(policy.applicationControl.blockedApplications.count, 1)
         XCTAssertEqual(policy.applicationControl.blockedApplications[0].signingId, "com.apple.calculator")
         XCTAssertEqual(policy.webUploadControl.mode, .disabled, "Legacy policies must default web uploads to disabled")
+        XCTAssertEqual(policy.usbStorageControl.encryptionMode, .disabled, "Legacy policies must not require a container")
+        XCTAssertEqual(policy.usbStorageControl.containerSizePercent, 90)
+        XCTAssertEqual(policy.printerControl.mode, .disabled, "Legacy policies must default printer control to disabled")
     }
 
     func testLoadWebUploadPolicyAndRejectUnknownProperties() throws {

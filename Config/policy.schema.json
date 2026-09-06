@@ -69,6 +69,17 @@
         },
         "blockExternalStorage": {
           "type": "boolean"
+        },
+        "encryptionMode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"],
+          "description": "Requires writes to use a Velox AES-256 encrypted removable-media container."
+        },
+        "containerSizePercent": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 95,
+          "description": "Virtual encrypted-container capacity as a percentage of the outer volume size."
         }
       }
     },
@@ -118,9 +129,96 @@
           }
         }
       }
+    },
+    "printerControl": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"],
+          "description": "Controls physical printer queues through the local CUPS scheduler."
+        },
+        "blockAllPrinters": {
+          "type": "boolean",
+          "description": "Reject, stop, and cancel jobs on every configured physical printer queue when enforcing."
+        }
+      }
+    },
+    "networkFlowControl": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"],
+          "description": "Operating mode for outbound network socket flow inspection."
+        },
+        "defaultAction": {
+          "type": "string",
+          "enum": ["allow", "block"],
+          "description": "Default action for outbound connections not matching any explicit destination rule."
+        },
+        "rules": {
+          "type": "array",
+          "description": "Destination and per-process rules for network flow control.",
+          "items": {
+            "$ref": "#/$defs/NetworkDestinationRule"
+          }
+        }
+      }
     }
   },
   "$defs": {
+    "NetworkDestinationRule": {
+      "type": "object",
+      "required": ["ruleId"],
+      "additionalProperties": false,
+      "properties": {
+        "ruleId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier for the network destination rule."
+        },
+        "domain": {
+          "type": ["string", "null"],
+          "description": "Destination domain or subdomain pattern (e.g. api.dropbox.com, *.s3.amazonaws.com)."
+        },
+        "ipAddress": {
+          "type": ["string", "null"],
+          "description": "Destination IPv4 or IPv6 address."
+        },
+        "cidrRange": {
+          "type": ["string", "null"],
+          "description": "Destination IPv4 or IPv6 CIDR subnet (e.g. 10.0.0.0/8, 192.168.1.0/24)."
+        },
+        "port": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Single destination port number."
+        },
+        "portRange": {
+          "type": ["string", "null"],
+          "description": "Destination port range formatted as 'start-end' (e.g. 80-443)."
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["any", "tcp", "udp"],
+          "description": "Transport layer protocol."
+        },
+        "process": {
+          "$ref": "#/$defs/ApplicationRule"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["allow", "block"],
+          "description": "Decision action for matching flows ('allow' or 'block')."
+        }
+      }
+    },
     "ApplicationRule": {
       "type": "object",
       "required": ["ruleId"],

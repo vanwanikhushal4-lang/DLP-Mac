@@ -14,6 +14,11 @@ private struct ControlSnapshot: Codable {
     let webUploadMode: String
     let webUploadProtectedDirectories: [String]
     let usbStorageMode: String
+    let usbEncryptionMode: String
+    let usbContainerSizePercent: Int
+    let usbExternalVolumeCount: Int
+    let usbEncryptedContainerCount: Int
+    let usbEncryptionLastError: String?
     let nearbyTransferMode: String
     let nearbyTransferProtectedDirectories: [String]
     let nearbyTransferBlocksAirDrop: Bool
@@ -22,6 +27,14 @@ private struct ControlSnapshot: Codable {
     let clipboardBlockedRuleCount: Int
     let clipboardBlockedSigningIds: [String]
     let clipboardBlockedExecutablePaths: [String]
+    let printerMode: String
+    let printerQueueCount: Int
+    let printerControlledQueueCount: Int
+    let printerLastError: String?
+    let networkFlowMode: String
+    let networkFlowDefaultAction: String
+    let networkFlowRuleCount: Int
+    let networkFlowRules: [NetworkDestinationRule]
     let totalAuthHandled: UInt64
     let totalDeadlineMisses: UInt64
     let message: String?
@@ -151,6 +164,8 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
     private let healthPath: String
     private let logPath: String
     private let eventLogger: EventLogger
+    private let usbEncryptionCoordinator: USBEncryptionCoordinator
+    private let printerCoordinator: PrinterControlCoordinator
     private let mutationLock = NSLock()
     private let clientsLock = NSLock()
     private var connectedClients: [NSXPCConnection] = []
@@ -160,12 +175,16 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
         policyManager: PolicyManager,
         healthPath: String = "/Library/Application Support/VeloxMacDLP/health.json",
         logPath: String = EventLogger.defaultLogPath,
-        eventLogger: EventLogger? = nil
+        eventLogger: EventLogger? = nil,
+        usbEncryptionCoordinator: USBEncryptionCoordinator,
+        printerCoordinator: PrinterControlCoordinator
     ) {
         self.policyManager = policyManager
         self.healthPath = healthPath
         self.logPath = logPath
         self.eventLogger = eventLogger ?? EventLogger(logFilePath: logPath)
+        self.usbEncryptionCoordinator = usbEncryptionCoordinator
+        self.printerCoordinator = printerCoordinator
     }
 
     func addClient(_ connection: NSXPCConnection) {
@@ -230,7 +249,9 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
             webUploadControl: current.webUploadControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
-            clipboardControl: current.clipboardControl
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            networkFlowControl: current.networkFlowControl
         )
         apply(updated, reply: reply)
     }
@@ -254,7 +275,9 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
             ),
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
-            clipboardControl: current.clipboardControl
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            networkFlowControl: current.networkFlowControl
         )
         apply(updated, reply: reply)
     }
@@ -275,10 +298,44 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
             webUploadControl: current.webUploadControl,
             usbStorageControl: USBStorageControlConfig(
                 mode: requestedMode,
-                blockExternalStorage: current.usbStorageControl.blockExternalStorage
+                blockExternalStorage: current.usbStorageControl.blockExternalStorage,
+                encryptionMode: requestedMode == .disabled
+                    ? current.usbStorageControl.encryptionMode
+                    : .disabled,
+                containerSizePercent: current.usbStorageControl.containerSizePercent
             ),
             nearbyTransferControl: current.nearbyTransferControl,
-            clipboardControl: current.clipboardControl
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            networkFlowControl: current.networkFlowControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setUSBEncryptionMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedMode = PolicyMode(rawValue: mode) else {
+            reply(errorJSON("Unsupported USB encryption mode '\(mode)'."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: USBStorageControlConfig(
+                mode: requestedMode == .disabled ? current.usbStorageControl.mode : .disabled,
+                blockExternalStorage: current.usbStorageControl.blockExternalStorage,
+                encryptionMode: requestedMode,
+                containerSizePercent: current.usbStorageControl.containerSizePercent
+            ),
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            networkFlowControl: current.networkFlowControl
         )
         apply(updated, reply: reply)
     }
@@ -304,7 +361,9 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
                 blockBluetoothFileTransfer: current.nearbyTransferControl.blockBluetoothFileTransfer,
                 protectedDirectoryNames: current.nearbyTransferControl.protectedDirectoryNames
             ),
-            clipboardControl: current.clipboardControl
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            networkFlowControl: current.networkFlowControl
         )
         apply(updated, reply: reply)
     }
@@ -328,6 +387,163 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
             clipboardControl: ClipboardControlConfig(
                 mode: requestedMode,
                 blockedApplications: current.clipboardControl.blockedApplications
+            ),
+            printerControl: current.printerControl,
+            networkFlowControl: current.networkFlowControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setPrinterMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedMode = PolicyMode(rawValue: mode) else {
+            reply(errorJSON("Unsupported printer-control mode '\(mode)'."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: PrinterControlConfig(
+                mode: requestedMode,
+                blockAllPrinters: current.printerControl.blockAllPrinters
+            ),
+            networkFlowControl: current.networkFlowControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setNetworkFlowMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedMode = PolicyMode(rawValue: mode) else {
+            reply(errorJSON("Unsupported network-flow mode '\(mode)'."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            networkFlowControl: NetworkFlowControlConfig(
+                mode: requestedMode,
+                defaultAction: current.networkFlowControl.defaultAction,
+                rules: current.networkFlowControl.rules
+            )
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setNetworkFlowDefaultAction(_ action: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedAction = NetworkDefaultAction(rawValue: action) else {
+            reply(errorJSON("Unsupported network-flow default action '\(action)'."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            networkFlowControl: NetworkFlowControlConfig(
+                mode: current.networkFlowControl.mode,
+                defaultAction: requestedAction,
+                rules: current.networkFlowControl.rules
+            )
+        )
+        apply(updated, reply: reply)
+    }
+
+    func addNetworkFlowRule(_ ruleJSON: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let data = ruleJSON.data(using: .utf8),
+              let rule = try? JSONDecoder().decode(NetworkDestinationRule.self, from: data) else {
+            reply(errorJSON("Invalid network flow rule JSON format."))
+            return
+        }
+
+        let ruleId = rule.ruleId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !ruleId.isEmpty else {
+            reply(errorJSON("Network flow rule ID cannot be empty."))
+            return
+        }
+        guard rule.action == "allow" || rule.action == "block" else {
+            reply(errorJSON("Network flow rule action must be 'allow' or 'block'."))
+            return
+        }
+        guard rule.domain != nil || rule.ipAddress != nil || rule.cidrRange != nil || rule.port != nil || rule.portRange != nil || rule.protocol != .any || rule.process != nil else {
+            reply(errorJSON("Network flow rule must specify at least one criteria (domain, IP, CIDR, port, protocol, or process)."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        var rules = current.networkFlowControl.rules.filter { $0.ruleId != ruleId }
+        rules.append(rule)
+
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            networkFlowControl: NetworkFlowControlConfig(
+                mode: current.networkFlowControl.mode,
+                defaultAction: current.networkFlowControl.defaultAction,
+                rules: rules
+            )
+        )
+        apply(updated, reply: reply)
+    }
+
+    func removeNetworkFlowRule(ruleId: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        let targetId = ruleId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !targetId.isEmpty else {
+            reply(errorJSON("Network flow rule ID cannot be empty."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let rules = current.networkFlowControl.rules.filter { $0.ruleId != targetId }
+
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            networkFlowControl: NetworkFlowControlConfig(
+                mode: current.networkFlowControl.mode,
+                defaultAction: current.networkFlowControl.defaultAction,
+                rules: rules
             )
         )
         apply(updated, reply: reply)
@@ -382,7 +598,9 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
             clipboardControl: ClipboardControlConfig(
                 mode: current.clipboardControl.mode,
                 blockedApplications: blockedRules
-            )
+            ),
+            printerControl: current.printerControl,
+            networkFlowControl: current.networkFlowControl
         )
         apply(updated, reply: reply)
     }
@@ -511,6 +729,55 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
         reply(#"{"ok":true}"#)
     }
 
+    func recordNetworkFlowEvent(_ payloadJSON: String, withReply reply: @escaping (String) -> Void) {
+        guard let data = payloadJSON.data(using: .utf8), data.count <= 32_768,
+              let received = try? JSONDecoder().decode(ExecutionEvent.self, from: data),
+              received.module == "network-flow-control",
+              received.action == "socket-connect",
+              ["blocked", "would-block"].contains(received.decision) else {
+            reply(errorJSON("Invalid network-flow event."))
+            return
+        }
+
+        let destination = (received.resourcePath ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let executablePath = received.executablePath
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !destination.isEmpty,
+              destination.count <= 2_048,
+              !destination.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
+              !executablePath.isEmpty,
+              executablePath.count <= 4_096,
+              received.policyVersion >= 0,
+              received.ruleId?.count ?? 0 <= 512,
+              received.signingId?.count ?? 0 <= 512,
+              received.teamId?.count ?? 0 <= 128 else {
+            reply(errorJSON("Network-flow event contains invalid metadata."))
+            return
+        }
+
+        let event = ExecutionEvent(
+            module: "network-flow-control",
+            action: "socket-connect",
+            decision: received.decision,
+            ruleId: received.ruleId,
+            policyVersion: received.policyVersion,
+            executablePath: executablePath,
+            signingId: received.signingId,
+            teamId: received.teamId,
+            pid: received.pid,
+            parentPid: received.parentPid,
+            uid: received.uid,
+            decisionLatencyMicros: received.decisionLatencyMicros,
+            authResponseResult: received.authResponseResult,
+            resourcePath: destination,
+            pageURL: received.pageURL.map { String($0.prefix(32)) },
+            interaction: received.interaction.map { String($0.prefix(64)) }
+        )
+        eventLogger.logEventSync(event)
+        reply(#"{"ok":true}"#)
+    }
+
     func setApplicationBlocked(
         signingId: String,
         executablePath: String,
@@ -562,7 +829,9 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
             webUploadControl: current.webUploadControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
-            clipboardControl: current.clipboardControl
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            networkFlowControl: current.networkFlowControl
         )
         apply(updated, reply: reply)
     }
@@ -585,6 +854,11 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
     private func apply(_ policy: VeloxPolicy, reply: (String) -> Void) {
         do {
             try policyManager.applyPolicy(policy, persistToDisk: true)
+            // Container creation/attachment can take longer than the local web
+            // bridge timeout. Reconcile asynchronously; the dashboard polls the
+            // runtime snapshot and surfaces any provisioning error.
+            usbEncryptionCoordinator.reconcileSoon()
+            printerCoordinator.reconcileNow()
             logger.info("Activated console policy version \(policy.policyVersion)")
             reply(snapshotJSON())
         } catch {
@@ -596,6 +870,8 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
     private func snapshotJSON() -> String {
         let policy = policyManager.policyEngine.currentPolicy()
         let health = readHealth()
+        let usbEncryption = usbEncryptionCoordinator.snapshot()
+        let printer = printerCoordinator.snapshot()
         return encode(
             ControlSnapshot(
                 ok: true,
@@ -610,6 +886,11 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
                 webUploadMode: policy.webUploadControl.mode.rawValue,
                 webUploadProtectedDirectories: policy.webUploadControl.protectedDirectoryNames,
                 usbStorageMode: policy.usbStorageControl.mode.rawValue,
+                usbEncryptionMode: policy.usbStorageControl.encryptionMode.rawValue,
+                usbContainerSizePercent: policy.usbStorageControl.containerSizePercent,
+                usbExternalVolumeCount: usbEncryption.discoveredVolumeCount,
+                usbEncryptedContainerCount: usbEncryption.encryptedContainerCount,
+                usbEncryptionLastError: usbEncryption.lastError,
                 nearbyTransferMode: policy.nearbyTransferControl.mode.rawValue,
                 nearbyTransferProtectedDirectories: policy.nearbyTransferControl.protectedDirectoryNames,
                 nearbyTransferBlocksAirDrop: policy.nearbyTransferControl.blockAirDrop,
@@ -621,6 +902,14 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
                     .map { $0.lowercased() },
                 clipboardBlockedExecutablePaths: policy.clipboardControl.blockedApplications
                     .compactMap(\.executablePath),
+                printerMode: policy.printerControl.mode.rawValue,
+                printerQueueCount: printer.discoveredQueueCount,
+                printerControlledQueueCount: printer.controlledQueueCount,
+                printerLastError: printer.lastError,
+                networkFlowMode: policy.networkFlowControl.mode.rawValue,
+                networkFlowDefaultAction: policy.networkFlowControl.defaultAction.rawValue,
+                networkFlowRuleCount: policy.networkFlowControl.rules.count,
+                networkFlowRules: policy.networkFlowControl.rules,
                 totalAuthHandled: health?.totalAuthHandled ?? 0,
                 totalDeadlineMisses: health?.totalDeadlineMisses ?? 0,
                 message: nil
