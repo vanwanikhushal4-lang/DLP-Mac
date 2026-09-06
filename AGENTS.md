@@ -33,7 +33,7 @@ The local console call flow is:
 
 Blocked-event notifications flow back through `VeloxClientProtocol` and are rendered both in macOS notifications and the React activity view.
 
-Network Filter decisions use the separate app-group-scoped `L7US4BH7Q2.co.velox.macdlp.networkfilter.xpc` bridge. Only the signed Team-ID-bound host may register. The host forwards privacy-safe provider events into the root-owned structured log; never attempt to export payload data or decrypted traffic from `NEFilterDataProvider`.
+Network Filter decisions are sent over an asynchronous, write-only XPC event sink to the Endpoint Security extension, which owns the structured activity log. The listener accepts this narrow interface only from the Team-ID-bound `co.velox.macdlp.networkfilter` identity; the provider cannot mutate policy. Never export payload data or decrypted traffic from `NEFilterDataProvider`.
 
 ## Security boundaries and invariants
 

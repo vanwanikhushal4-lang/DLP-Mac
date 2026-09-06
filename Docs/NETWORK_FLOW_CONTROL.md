@@ -36,8 +36,8 @@ VeloxMacDLP provides outbound network flow inspection and policy enforcement via
 - **NEFilterDataProvider**: Inspects `NEFilterSocketFlow` in `handleNewFlow` for `.outbound` connections.
 - **Audit Token Process Attribution**: Converts `flow.sourceProcessAuditToken` into `audit_token_t` and queries `SecCodeCopyGuestWithAttributes` and `proc_pidpath` to resolve signing attributes.
 - **Fail-Open Resilience**: If flow context cannot be extracted or evaluation errors occur, flows are permitted fail-open.
-- **Authenticated Event Bridge**: The data provider sends blocked/would-block metadata to the signed Velox host over the app-group-scoped NEMachServiceName. The listener rejects callers that are not the Team-ID-bound co.velox.macdlp host.
-- **Privacy-Safe Telemetry**: The host forwards those structured events to the root-owned Endpoint Security logging service, which makes them available to Live Activity and native “Blocked by Velox DLP” notifications. Logs record destination hosts or IP addresses, ports, protocol, rule IDs, and process signing identities. Payload data and decrypted traffic contents are never captured or logged.
+- **Authenticated Event Sink**: The data provider asynchronously sends blocked/would-block metadata directly to the Endpoint Security extension's root-owned log service. The shared listener verifies the caller's signature and Team ID, then exposes only a write-only event-sink protocol to `co.velox.macdlp.networkfilter`; it does not grant the provider policy mutation access.
+- **Privacy-Safe Telemetry**: Persisted events become available to Live Activity and native “Blocked by Velox DLP” notifications. Logs record destination hosts or IP addresses, ports, protocol, rule IDs, and process signing identities. Payload data and decrypted traffic contents are never captured or logged.
 
 ## Configuration & XPC Management
 

@@ -83,13 +83,6 @@ import Foundation
         withReply reply: @escaping (String) -> Void
     )
 
-    /// Persists a privacy-safe flow decision forwarded by the Network Filter
-    /// system extension through the signed host application.
-    func recordNetworkFlowEvent(
-        _ payloadJSON: String,
-        withReply reply: @escaping (String) -> Void
-    )
-
     func setApplicationBlocked(
         signingId: String,
         executablePath: String,
@@ -116,28 +109,23 @@ import Foundation
     )
 }
 
-/// Host-side registration surface exposed by the Network Filter system
-/// extension's app-group-scoped Mach service.
-@objc public protocol VeloxNetworkEventServiceProtocol {
-    func registerClient(withReply reply: @escaping (Bool) -> Void)
-}
-
-/// Provider-to-host callback carrying only the structured, privacy-safe event.
-@objc public protocol VeloxNetworkEventClientProtocol {
-    func handleNetworkEvent(_ eventJSON: String)
+/// Narrow, write-only event sink used by the signed Network Filter system
+/// extension. It deliberately does not expose policy mutation methods.
+@objc public protocol VeloxNetworkEventSinkProtocol {
+    func recordNetworkFlowEvent(
+        _ payloadJSON: String,
+        withReply reply: @escaping (String) -> Void
+    )
 }
 
 public enum VeloxControlConstants {
     public static let machServiceName = "L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc"
     public static let hostBundleIdentifier = "co.velox.macdlp"
     public static let safariUploadGuardBundleIdentifier = "co.velox.macdlp.uploadguard"
+    public static let networkFilterBundleIdentifier = "co.velox.macdlp.networkfilter"
     public static let authorizedControlBundleIdentifiers: Set<String> = [
         hostBundleIdentifier,
         safariUploadGuardBundleIdentifier
     ]
     public static let teamIdentifier = "L7US4BH7Q2"
-}
-
-public enum VeloxNetworkEventConstants {
-    public static let machServiceName = "L7US4BH7Q2.co.velox.macdlp.networkfilter.xpc"
 }

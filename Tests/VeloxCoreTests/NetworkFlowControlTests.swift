@@ -337,5 +337,24 @@ final class NetworkFlowControlTests: XCTestCase {
             formatted.body,
             "Velox DLP blocked api.dropbox.com for Dropbox."
         )
+
+        let safariFormatted = VeloxNotificationFormatter.format(
+            module: "network-flow-control",
+            action: "socket-connect",
+            target: "youtube.com",
+            detail: "/System/Library/Frameworks/WebKit.framework/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking"
+        )
+        XCTAssertEqual(
+            safariFormatted.body,
+            "Velox DLP blocked youtube.com for Safari."
+        )
+
+        let dnsFormatted = VeloxNotificationFormatter.format(
+            module: "network-flow-control",
+            action: "socket-connect",
+            target: "youtube.com",
+            detail: "/usr/sbin/mDNSResponder"
+        )
+        XCTAssertEqual(dnsFormatted.body, "Velox DLP blocked youtube.com.")
     }
 }

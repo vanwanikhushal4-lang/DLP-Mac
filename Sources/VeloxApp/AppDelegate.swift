@@ -52,7 +52,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
     private var statusItem: NSStatusItem?
     private var pasteboardMonitor: PasteboardMonitor?
     private var activeEventMonitor: VeloxActiveEventMonitor?
-    private var networkEventClient: VeloxNetworkEventClient?
     private enum ExtensionRequestOperation {
         case activation
         case deactivation
@@ -92,10 +91,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
             let activeMonitor = VeloxActiveEventMonitor()
             self.activeEventMonitor = activeMonitor
             activeMonitor.start()
-
-            let networkEventClient = VeloxNetworkEventClient()
-            self.networkEventClient = networkEventClient
-            networkEventClient.start()
 
             if args.contains("--safari-settings") {
                 openSafariExtensionSettings()

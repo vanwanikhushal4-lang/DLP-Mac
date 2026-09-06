@@ -8,7 +8,6 @@ logger.info("Velox Network Filter System Extension initializing...")
 
 autoreleasepool {
     NEProvider.startSystemExtensionMode()
-    NetworkEventService.shared.startListener()
 }
 
 dispatchMain()

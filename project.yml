@@ -36,8 +36,8 @@ targets:
       path: Sources/VeloxExtension/Info.plist
       properties:
         CFBundlePackageType: SYSX
-        CFBundleShortVersionString: "1.8.2"
-        CFBundleVersion: "17"
+        CFBundleShortVersionString: "1.8.5"
+        CFBundleVersion: "20"
         NSSystemExtensionUsageDescription: Velox Mac DLP monitors and controls application execution to enforce organizational security policy.
         NSEndpointSecurityMachServiceName: L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc
     entitlements:
@@ -73,8 +73,8 @@ targets:
       path: Sources/VeloxSafariUploadGuard/Info.plist
       properties:
         CFBundleDisplayName: Velox DLP Upload Guard
-        CFBundleShortVersionString: "1.8.2"
-        CFBundleVersion: "17"
+        CFBundleShortVersionString: "1.8.5"
+        CFBundleVersion: "20"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.Safari.web-extension
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
@@ -101,13 +101,13 @@ targets:
     sources:
       - path: Sources/VeloxNetworkFilter/main.swift
       - path: Sources/VeloxNetworkFilter/FilterDataProvider.swift
-      - path: Sources/VeloxNetworkFilter/NetworkEventService.swift
+      - path: Sources/VeloxNetworkFilter/NetworkEventForwarder.swift
     info:
       path: Sources/VeloxNetworkFilter/Info.plist
       properties:
         CFBundlePackageType: SYSX
-        CFBundleShortVersionString: "1.8.2"
-        CFBundleVersion: "17"
+        CFBundleShortVersionString: "1.8.5"
+        CFBundleVersion: "20"
         NSSystemExtensionUsageDescription: Velox Mac DLP monitors and filters outbound network flow connections according to organizational security policy.
         NetworkExtension:
           NEMachServiceName: $(TeamIdentifierPrefix)co.velox.macdlp.networkfilter.xpc
@@ -121,6 +121,8 @@ targets:
         com.apple.security.app-sandbox: true
         com.apple.security.application-groups:
           - $(TeamIdentifierPrefix)co.velox.macdlp
+        com.apple.security.temporary-exception.mach-lookup.global-name:
+          - L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc
     dependencies:
       - target: VeloxCore
     settings:
@@ -147,15 +149,14 @@ targets:
       - path: Sources/VeloxApp/PasteboardMonitor.swift
       - path: Sources/VeloxApp/VeloxNotificationManager.swift
       - path: Sources/VeloxApp/VeloxActiveEventMonitor.swift
-      - path: Sources/VeloxApp/VeloxNetworkEventClient.swift
       - path: Web/dist
         type: folder
         buildPhase: resources
     info:
       path: Sources/VeloxApp/Info.plist
       properties:
-        CFBundleShortVersionString: "1.8.2"
-        CFBundleVersion: "17"
+        CFBundleShortVersionString: "1.8.5"
+        CFBundleVersion: "20"
         LSUIElement: true
         SBAppUsesLocalNotifications: true
         NSUserNotificationAlertStyle: alert

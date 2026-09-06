@@ -148,7 +148,7 @@ open class FilterDataProvider: NEFilterDataProvider {
                 interaction: remotePort > 0 ? "\(networkProtocol.rawValue)/\(remotePort)" : networkProtocol.rawValue
             )
             eventLogger.logEventAsync(event)
-            NetworkEventService.shared.broadcast(event)
+            NetworkEventForwarder.shared.forward(event)
         }
 
         if !decision.shouldAllowFlow {
@@ -215,8 +215,10 @@ open class FilterDataProvider: NEFilterDataProvider {
 
         // Executable path fallback via proc_pidpath
         var pathBuffer = [CChar](repeating: 0, count: 4096)
-        if proc_pidpath(pid, &pathBuffer, UInt32(pathBuffer.count)) > 0 {
-            executablePath = String(cString: pathBuffer)
+        let pathLength = proc_pidpath(pid, &pathBuffer, UInt32(pathBuffer.count))
+        if pathLength > 0 {
+            let utf8Bytes = pathBuffer.prefix(Int(pathLength)).map { UInt8(bitPattern: $0) }
+            executablePath = String(decoding: utf8Bytes, as: UTF8.self)
         }
 
         return ProcessContext(

@@ -12,5 +12,9 @@
 	<array>
 		<string>$(TeamIdentifierPrefix)co.velox.macdlp</string>
 	</array>
+	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+	<array>
+		<string>L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc</string>
+	</array>
 </dict>
 </plist>

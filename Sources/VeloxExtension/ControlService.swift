@@ -71,13 +71,18 @@ private struct ClipboardEventAttempt: Decodable {
     let cleared: Bool
 }
 
-/// Rejects every caller except the valid, Team-ID-bound Velox host application.
+/// Resolves each valid, Team-ID-bound Velox caller to its least-privilege role.
 /// PID lookup is performed while accepting the live connection, then both the
 /// signature validity and immutable signing identity are checked.
+enum VeloxControlPeerRole {
+    case fullControl
+    case networkEventSink
+}
+
 final class VeloxControlPeerValidator {
     private let logger = Logger(subsystem: "co.velox.macdlp.endpointsecurity", category: "ControlAuth")
 
-    func isAuthorized(_ connection: NSXPCConnection) -> Bool {
+    func role(for connection: NSXPCConnection) -> VeloxControlPeerRole? {
         let attributes = [
             kSecGuestAttributePid: NSNumber(value: connection.processIdentifier)
         ] as CFDictionary
@@ -86,7 +91,7 @@ final class VeloxControlPeerValidator {
         guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &dynamicCode) == errSecSuccess,
               let dynamicCode else {
             logger.error("Rejected XPC PID \(connection.processIdentifier): unable to obtain code identity")
-            return false
+            return nil
         }
 
         guard SecCodeCheckValidity(
@@ -95,14 +100,14 @@ final class VeloxControlPeerValidator {
             nil
         ) == errSecSuccess else {
             logger.error("Rejected XPC PID \(connection.processIdentifier): invalid code signature")
-            return false
+            return nil
         }
 
         var staticCode: SecStaticCode?
         guard SecCodeCopyStaticCode(dynamicCode, [], &staticCode) == errSecSuccess,
               let staticCode else {
             logger.error("Rejected XPC PID \(connection.processIdentifier): unable to inspect static code")
-            return false
+            return nil
         }
 
         var signingInformation: CFDictionary?
@@ -113,20 +118,29 @@ final class VeloxControlPeerValidator {
         ) == errSecSuccess,
               let values = signingInformation as? [String: Any] else {
             logger.error("Rejected XPC PID \(connection.processIdentifier): missing signing information")
-            return false
+            return nil
         }
 
         let identifier = values[kSecCodeInfoIdentifier as String] as? String
         let teamIdentifier = values[kSecCodeInfoTeamIdentifier as String] as? String
-        let accepted = identifier.map(VeloxControlConstants.authorizedControlBundleIdentifiers.contains) == true &&
-            teamIdentifier == VeloxControlConstants.teamIdentifier
-
-        if !accepted {
+        guard teamIdentifier == VeloxControlConstants.teamIdentifier else {
             logger.error(
                 "Rejected XPC PID \(connection.processIdentifier): identifier=\(identifier ?? "missing", privacy: .public), team=\(teamIdentifier ?? "missing", privacy: .public)"
             )
+            return nil
         }
-        return accepted
+
+        if identifier.map(VeloxControlConstants.authorizedControlBundleIdentifiers.contains) == true {
+            return .fullControl
+        }
+        if identifier == VeloxControlConstants.networkFilterBundleIdentifier {
+            return .networkEventSink
+        }
+
+        logger.error(
+            "Rejected XPC PID \(connection.processIdentifier): unauthorized identifier=\(identifier ?? "missing", privacy: .public)"
+        )
+        return nil
     }
 }
 
@@ -139,27 +153,33 @@ final class VeloxControlListenerDelegate: NSObject, NSXPCListenerDelegate {
     }
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
-        guard validator.isAuthorized(connection) else { return false }
-        connection.exportedInterface = NSXPCInterface(with: VeloxControlProtocol.self)
-        connection.exportedObject = service
-        connection.remoteObjectInterface = NSXPCInterface(with: VeloxClientProtocol.self)
-        service.addClient(connection)
-        connection.invalidationHandler = { [weak service, weak connection] in
-            if let connection {
-                service?.removeClient(connection)
+        guard let role = validator.role(for: connection) else { return false }
+        switch role {
+        case .fullControl:
+            connection.exportedInterface = NSXPCInterface(with: VeloxControlProtocol.self)
+            connection.exportedObject = service
+            connection.remoteObjectInterface = NSXPCInterface(with: VeloxClientProtocol.self)
+            service.addClient(connection)
+            connection.invalidationHandler = { [weak service, weak connection] in
+                if let connection {
+                    service?.removeClient(connection)
+                }
             }
-        }
-        connection.interruptionHandler = { [weak service, weak connection] in
-            if let connection {
-                service?.removeClient(connection)
+            connection.interruptionHandler = { [weak service, weak connection] in
+                if let connection {
+                    service?.removeClient(connection)
+                }
             }
+        case .networkEventSink:
+            connection.exportedInterface = NSXPCInterface(with: VeloxNetworkEventSinkProtocol.self)
+            connection.exportedObject = service
         }
         connection.resume()
         return true
     }
 }
 
-final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Sendable {
+final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEventSinkProtocol, @unchecked Sendable {
     private let policyManager: PolicyManager
     private let healthPath: String
     private let logPath: String
@@ -207,9 +227,14 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
         let module = event.module
         let action = event.action
         let target = event.resourcePath ?? event.executablePath
-        let detail = event.module == "clipboard-control"
-            ? (event.pageURL ?? event.signingId ?? "Application")
-            : (event.signingId ?? event.teamId ?? "")
+        let detail: String
+        if event.module == "clipboard-control" {
+            detail = event.pageURL ?? event.signingId ?? "Application"
+        } else if event.module == "network-flow-control" {
+            detail = event.executablePath
+        } else {
+            detail = event.signingId ?? event.teamId ?? ""
+        }
         let timestamp = Date().timeIntervalSince1970
 
         for client in clients {
@@ -775,6 +800,9 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, @unchecked Send
             interaction: received.interaction.map { String($0.prefix(64)) }
         )
         eventLogger.logEventSync(event)
+        if event.decision == "blocked" {
+            broadcastBlockedEvent(event)
+        }
         reply(#"{"ok":true}"#)
     }
 

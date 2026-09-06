@@ -86,7 +86,18 @@ public enum VeloxNotificationFormatter {
         case "network-flow-control":
             let subtitle = "Network Connection Blocked"
             let destination = target.trimmingCharacters(in: .whitespacesAndNewlines)
-            let appName = parseApplicationName(from: detail, detail: "")
+            let browserName = parseBrowserName(from: detail)
+            let normalizedDetail = detail.lowercased()
+            let appName: String
+            if normalizedDetail.contains("mdnsresponder") {
+                // DNS-filter events are attributed to the shared system resolver,
+                // not to the originating browser. Do not mislabel that as the app.
+                appName = ""
+            } else if browserName != "browser" {
+                appName = browserName
+            } else {
+                appName = parseApplicationName(from: detail, detail: "")
+            }
             let blockedDestination = destination.isEmpty ? "a remote destination" : destination
             let body: String
             if appName.isEmpty || appName == "unknown" {
@@ -134,7 +145,7 @@ public enum VeloxNotificationFormatter {
 
     public static func parseBrowserName(from detail: String) -> String {
         let lower = detail.lowercased()
-        if lower.contains("safari") { return "Safari" }
+        if lower.contains("safari") || lower.contains("webkit.networking") { return "Safari" }
         if lower.contains("chrome") { return "Google Chrome" }
         if lower.contains("firefox") { return "Firefox" }
         if lower.contains("edge") { return "Microsoft Edge" }

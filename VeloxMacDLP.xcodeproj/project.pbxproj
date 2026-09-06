@@ -11,11 +11,11 @@
 		031AF3B7556CDE29AD555D1C /* PolicyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0B42A9DD8BC115FDE2AA6A /* PolicyManager.swift */; };
 		05FBE3C4CC47345F4E955468 /* ExtensionControlClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08CD7BEF1DC8E25506C7A63 /* ExtensionControlClient.swift */; };
 		07160851501CFA85F6B9BB9D /* EndpointSecurityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81B64AFAF9DDCBE97E80E5EC /* EndpointSecurityService.swift */; };
-		22EC63F3D3B9D21C45CB1C32 /* VeloxNetworkEventClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32EF27FC064A765D1C5EAA90 /* VeloxNetworkEventClient.swift */; };
 		2A778453D1F93BD65775D8CF /* PasteboardMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACD70840CAC2021E9E9296EE /* PasteboardMonitor.swift */; };
 		2D713E9C6FEDED1FF66546F7 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E848C9198C7BDCF17BF943E0 /* AppDelegate.swift */; };
 		2E9C26D4C691ADFD2C3326D9 /* PolicyEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4117DBC130D0A3621353698 /* PolicyEngineTests.swift */; };
 		317FC2D3CF2DDC1D65233EF1 /* ControlService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D188E5ECFB2A5166368BE0C3 /* ControlService.swift */; };
+		3451E2F7C08EE8B293FEC8EA /* NetworkEventForwarder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA59E86D92DD7301F7DDFF33 /* NetworkEventForwarder.swift */; };
 		34CA9FBB775B00917A2B3D67 /* VeloxControlProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6BCD21227DF6C1714AA35DB /* VeloxControlProtocol.swift */; };
 		3568DD9920554F00306E063C /* USBEncryptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5021B8C4C7525A5F69AD843E /* USBEncryptionTests.swift */; };
 		3B6AD40F8ABBBFB4B1A25001 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 40F66F3895B25267A205A8A6 /* content.js */; };
@@ -62,7 +62,6 @@
 		EFBC90373C73B96B0A5B3B0A /* FilterDataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ED218F132405DA6ADF27A86 /* FilterDataProvider.swift */; };
 		F168C25071F87FA7EE01F690 /* ProcessContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FEE10A504ABC6F0D8877A06 /* ProcessContext.swift */; };
 		F5F7DF0A1EB8EE3B25DDD457 /* VeloxSafariUploadGuard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6509C6F0F8BF66069AFDB446 /* VeloxSafariUploadGuard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		F8DB6777536E761E51AC366C /* NetworkEventService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC6D3FDFD6886127733A0039 /* NetworkEventService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -154,7 +153,6 @@
 		266D16FF787B8DEF8EDF9C43 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = background.js; sourceTree = "<group>"; };
 		2950E1340C2F09426D65D40D /* SecurityGuardianTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityGuardianTests.swift; sourceTree = "<group>"; };
 		2F736FC5BC1448530FA696FA /* PrinterControlCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterControlCoordinator.swift; sourceTree = "<group>"; };
-		32EF27FC064A765D1C5EAA90 /* VeloxNetworkEventClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VeloxNetworkEventClient.swift; sourceTree = "<group>"; };
 		3E6281042EA56E02C2E77C5C /* SafariUploadGuardControlClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariUploadGuardControlClient.swift; sourceTree = "<group>"; };
 		40F66F3895B25267A205A8A6 /* content.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = content.js; sourceTree = "<group>"; };
 		4D6346A0A5AD713836386EC5 /* VeloxNetworkFilter.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = VeloxNetworkFilter.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -191,7 +189,7 @@
 		CE0733F6AE5BF22F317BECD1 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
 		D0050427E96BFF6659A60078 /* USBEncryptionAccessController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = USBEncryptionAccessController.swift; sourceTree = "<group>"; };
 		D188E5ECFB2A5166368BE0C3 /* ControlService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlService.swift; sourceTree = "<group>"; };
-		DC6D3FDFD6886127733A0039 /* NetworkEventService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkEventService.swift; sourceTree = "<group>"; };
+		DA59E86D92DD7301F7DDFF33 /* NetworkEventForwarder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkEventForwarder.swift; sourceTree = "<group>"; };
 		DDF89EA6F481543896EFCCED /* dist */ = {isa = PBXFileReference; lastKnownFileType = folder; name = dist; path = Web/dist; sourceTree = SOURCE_ROOT; };
 		E01C90928CD01862787AE67E /* PrinterControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterControlTests.swift; sourceTree = "<group>"; };
 		E1519AE88C01CAC0621D6474 /* NetworkFlowControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkFlowControlTests.swift; sourceTree = "<group>"; };
@@ -340,7 +338,7 @@
 			children = (
 				8ED218F132405DA6ADF27A86 /* FilterDataProvider.swift */,
 				9496FB44DF33CCBA00AB02F1 /* main.swift */,
-				DC6D3FDFD6886127733A0039 /* NetworkEventService.swift */,
+				DA59E86D92DD7301F7DDFF33 /* NetworkEventForwarder.swift */,
 			);
 			name = VeloxNetworkFilter;
 			path = Sources/VeloxNetworkFilter;
@@ -357,7 +355,6 @@
 				BEF46A124E99C346B960B335 /* main.swift */,
 				ACD70840CAC2021E9E9296EE /* PasteboardMonitor.swift */,
 				05AF34D754592B8E163EE311 /* VeloxActiveEventMonitor.swift */,
-				32EF27FC064A765D1C5EAA90 /* VeloxNetworkEventClient.swift */,
 				707C242EEB12AB3055A0D43D /* VeloxNotificationManager.swift */,
 			);
 			name = VeloxApp;
@@ -694,7 +691,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				EFBC90373C73B96B0A5B3B0A /* FilterDataProvider.swift in Sources */,
-				F8DB6777536E761E51AC366C /* NetworkEventService.swift in Sources */,
+				3451E2F7C08EE8B293FEC8EA /* NetworkEventForwarder.swift in Sources */,
 				7BF64DED6171572456D51B84 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -710,7 +707,6 @@
 				DA752384226B2256532D2F2D /* InstalledApplicationScanner.swift in Sources */,
 				2A778453D1F93BD65775D8CF /* PasteboardMonitor.swift in Sources */,
 				A47E6072CE554F474BFF829A /* VeloxActiveEventMonitor.swift in Sources */,
-				22EC63F3D3B9D21C45CB1C32 /* VeloxNetworkEventClient.swift in Sources */,
 				3BDA3AEDFE6118CB0786BD99 /* VeloxNotificationManager.swift in Sources */,
 				7D53196C3966701A36A148D5 /* main.swift in Sources */,
 			);
