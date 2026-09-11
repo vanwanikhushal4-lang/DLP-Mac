@@ -52,6 +52,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
     private var statusItem: NSStatusItem?
     private var pasteboardMonitor: PasteboardMonitor?
     private var activeEventMonitor: VeloxActiveEventMonitor?
+    private var ocrService: OCRService?
+    private var screenshotOCRMonitor: ScreenshotOCRMonitor?
+    private var endpointDiscoveryService: EndpointDiscoveryService?
     private enum ExtensionRequestOperation {
         case activation
         case deactivation
@@ -80,11 +83,33 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
             reportCurrentStatus()
             exit(0)
         } else {
-            let consoleController = ConsoleController()
+            let controlClient = ExtensionControlClient()
+            let ocrService = OCRService()
+            let screenshotOCRMonitor = ScreenshotOCRMonitor(
+                ocrService: ocrService,
+                controlClient: controlClient
+            )
+            self.ocrService = ocrService
+            self.screenshotOCRMonitor = screenshotOCRMonitor
+            let endpointDiscoveryService = EndpointDiscoveryService(
+                ocrService: ocrService,
+                controlClient: controlClient
+            )
+            self.endpointDiscoveryService = endpointDiscoveryService
+            endpointDiscoveryService.startScheduler()
+            VeloxNotificationManager.shared.setPotentialScreenshotHandler { [weak screenshotOCRMonitor] path in
+                screenshotOCRMonitor?.processCandidate(path: path)
+            }
+
+            let consoleController = ConsoleController(
+                controlClient: controlClient,
+                ocrService: ocrService,
+                endpointDiscoveryService: endpointDiscoveryService
+            )
             self.consoleController = consoleController
             consoleController.show()
 
-            let monitor = PasteboardMonitor(controlClient: ExtensionControlClient())
+            let monitor = PasteboardMonitor(controlClient: controlClient)
             self.pasteboardMonitor = monitor
             monitor.start()
 
@@ -106,6 +131,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
         false
     }
 
+    public func applicationWillTerminate(_ notification: Notification) {
+        VeloxNotificationManager.shared.setPotentialScreenshotHandler(nil)
+        endpointDiscoveryService?.stopScheduler()
+    }
+
     /// Finder/Launchpad reopens an existing LSUIElement process instead of
     /// launching it again. Always restore the hidden React console in that case.
     @MainActor
@@ -120,10 +150,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
     @MainActor
     private func configureMenuBar() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(
-            systemSymbolName: "shield.lefthalf.filled",
-            accessibilityDescription: "Velox Mac DLP"
-        )
+        if let shieldImage = NSImage(named: "VeloxAppIcon") {
+            shieldImage.size = NSSize(width: 19, height: 19)
+            shieldImage.accessibilityDescription = "Velox Mac DLP"
+            item.button?.image = shieldImage
+        } else {
+            item.button?.image = NSImage(
+                systemSymbolName: "shield.lefthalf.filled",
+                accessibilityDescription: "Velox Mac DLP"
+            )
+        }
 
         let menu = NSMenu()
         let openItem = NSMenuItem(title: "Open Velox Console", action: #selector(openConsole), keyEquivalent: "o")

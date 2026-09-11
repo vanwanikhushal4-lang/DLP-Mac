@@ -1,0 +1,3 @@
+// Local development builds use the development content-filter entitlement.
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_ENTITLEMENTS = Sources/VeloxApp/VeloxMacDLP.entitlements

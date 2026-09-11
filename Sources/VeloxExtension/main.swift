@@ -18,11 +18,14 @@ if geteuid() == 0 {
 let eventLogger = EventLogger(logFilePath: logPath)
 let policyManager = PolicyManager(policyPath: policyPath, logger: eventLogger)
 let usbEncryptionAccessController = USBEncryptionAccessController()
+let classificationCache = FileClassificationCache()
+let managedVirtualMountAllowance = ManagedVirtualMountAllowance()
 
 let usbEncryptionCoordinator = USBEncryptionCoordinator(
     policyEngine: policyManager.policyEngine,
     eventLogger: eventLogger,
-    accessController: usbEncryptionAccessController
+    accessController: usbEncryptionAccessController,
+    managedVirtualMountAllowance: managedVirtualMountAllowance
 )
 
 let printerCoordinator = PrinterControlCoordinator(
@@ -33,7 +36,9 @@ let printerCoordinator = PrinterControlCoordinator(
 let esService = EndpointSecurityService(
     policyEngine: policyManager.policyEngine,
     logger: eventLogger,
-    usbEncryptionAccessController: usbEncryptionAccessController
+    usbEncryptionAccessController: usbEncryptionAccessController,
+    classificationCache: classificationCache,
+    managedVirtualMountAllowance: managedVirtualMountAllowance
 )
 
 let controlService = VeloxControlService(
@@ -41,7 +46,8 @@ let controlService = VeloxControlService(
     logPath: logPath,
     eventLogger: eventLogger,
     usbEncryptionCoordinator: usbEncryptionCoordinator,
-    printerCoordinator: printerCoordinator
+    printerCoordinator: printerCoordinator,
+    classificationCache: classificationCache
 )
 
 esService.onEventBlocked = { [weak controlService] event in
@@ -52,6 +58,9 @@ printerCoordinator.onBlockedEvent = { [weak controlService] event in
 }
 esService.onVolumeTopologyChanged = { [weak usbEncryptionCoordinator] in
     usbEncryptionCoordinator?.reconcileSoon()
+}
+esService.onPotentialScreenshotCreated = { [weak controlService] path in
+    controlService?.broadcastPotentialScreenshot(path: path)
 }
 
 let controlListenerDelegate = VeloxControlListenerDelegate(service: controlService)
@@ -65,6 +74,10 @@ policyManager.onPolicyReloaded = { newPolicy in
     esService.clearCache()
     usbEncryptionCoordinator.reconcileSoon()
     printerCoordinator.policyDidChange()
+    classificationCache.retainValid(
+        ruleIds: Set(newPolicy.ocrControl.rules.map(\.ruleId)),
+        classifications: Set(newPolicy.ocrControl.rules.map { $0.classification.lowercased() })
+    )
 }
 
 policyManager.onPolicyError = { errMessage in

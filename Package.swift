@@ -29,13 +29,24 @@ let package = Package(
                 "Info.plist",
                 "VeloxMacDLP.entitlements",
                 "VeloxMacDLPDeveloperID.entitlements",
+            ],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("ImageIO"),
+                .linkedFramework("PDFKit"),
+                .linkedFramework("UniformTypeIdentifiers"),
+                .linkedFramework("Vision")
             ]
         ),
         .executableTarget(
             name: "VeloxExtension",
             dependencies: ["VeloxCore"],
             path: "Sources/VeloxExtension",
-            exclude: ["Info.plist", "VeloxMacDLPSE.entitlements"]
+            exclude: [
+                "Info.plist",
+                "VeloxMacDLPSE.entitlements",
+                "VeloxMacDLPSEDeveloperID.entitlements"
+            ]
         ),
         .executableTarget(
             name: "VeloxNetworkFilter",

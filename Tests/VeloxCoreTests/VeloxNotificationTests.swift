@@ -87,6 +87,33 @@ final class VeloxNotificationTests: XCTestCase {
         )
     }
 
+    func testOpticalAndDiskImageNotificationFormatting() {
+        let diskImage = VeloxNotificationFormatter.format(
+            module: "optical-disk-image-control",
+            action: "disk-image-mount",
+            target: "/dev/disk8s1 -> /Volumes/Installer (apfs)",
+            detail: "com.apple.diskarbitrationd"
+        )
+        XCTAssertEqual(diskImage.title, "Blocked by Velox DLP")
+        XCTAssertEqual(diskImage.subtitle, "Disk Image Blocked")
+        XCTAssertEqual(
+            diskImage.body,
+            "Disk image 'Installer' was blocked from mounting by security policy."
+        )
+
+        let optical = VeloxNotificationFormatter.format(
+            module: "optical-disk-image-control",
+            action: "optical-media-mount",
+            target: "/dev/disk9 -> /Volumes/ARCHIVE_DVD (udf)",
+            detail: "com.apple.diskarbitrationd"
+        )
+        XCTAssertEqual(optical.subtitle, "Optical Media Blocked")
+        XCTAssertEqual(
+            optical.body,
+            "Optical media 'ARCHIVE_DVD' was blocked from mounting by security policy."
+        )
+    }
+
     func testPrinterControlNotificationFormatting() {
         let formatted = VeloxNotificationFormatter.format(
             module: "printer-control",
@@ -101,6 +128,39 @@ final class VeloxNotificationTests: XCTestCase {
             formatted.body,
             "Printing to printer 'Office-HP' was blocked by security policy."
         )
+    }
+
+    func testPrintToPDFNotificationFormatting() {
+        let formatted = VeloxNotificationFormatter.format(
+            module: "print-to-pdf-control",
+            action: "pdf-file-create",
+            target: "/Users/alice/Documents/board-report.pdf",
+            detail: "/Applications/Microsoft Word.app/Contents/MacOS/Microsoft Word"
+        )
+
+        XCTAssertEqual(formatted.title, "Blocked by Velox DLP")
+        XCTAssertEqual(formatted.subtitle, "PDF File Output Blocked")
+        XCTAssertEqual(
+            formatted.body,
+            "Creating 'board-report.pdf' from Microsoft Word was blocked by security policy."
+        )
+    }
+
+    func testOCRNotificationFormattingDoesNotExposeRecognizedText() {
+        let formatted = VeloxNotificationFormatter.format(
+            module: "ocr-content-classification",
+            action: "screenshot-scan",
+            target: "public.png",
+            detail: "Payment Card Data, Confidential Document"
+        )
+
+        XCTAssertEqual(formatted.title, "Blocked by Velox DLP")
+        XCTAssertEqual(formatted.subtitle, "Sensitive Screenshot Blocked")
+        XCTAssertEqual(
+            formatted.body,
+            "Velox DLP detected Payment Card Data, Confidential Document and secured the screenshot."
+        )
+        XCTAssertFalse(formatted.body.contains("public.png"))
     }
 
     func testNearbyTransferNotificationFormatting() {

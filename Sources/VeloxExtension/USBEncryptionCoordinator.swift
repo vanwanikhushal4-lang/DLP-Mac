@@ -38,6 +38,7 @@ final class USBEncryptionCoordinator: @unchecked Sendable {
     private let policyEngine: PolicyEngine
     private let eventLogger: EventLogger
     private let accessController: USBEncryptionAccessController
+    private let managedVirtualMountAllowance: ManagedVirtualMountAllowance
     private let keyStatePath: String
     private let workQueue = DispatchQueue(label: "co.velox.macdlp.usb-encryption", qos: .utility)
     private let snapshotLock = NSLock()
@@ -55,11 +56,13 @@ final class USBEncryptionCoordinator: @unchecked Sendable {
         policyEngine: PolicyEngine,
         eventLogger: EventLogger,
         accessController: USBEncryptionAccessController,
+        managedVirtualMountAllowance: ManagedVirtualMountAllowance,
         keyStatePath: String = USBEncryptionCoordinator.defaultKeyStatePath
     ) {
         self.policyEngine = policyEngine
         self.eventLogger = eventLogger
         self.accessController = accessController
+        self.managedVirtualMountAllowance = managedVirtualMountAllowance
         self.keyStatePath = keyStatePath
     }
 
@@ -264,6 +267,10 @@ final class USBEncryptionCoordinator: @unchecked Sendable {
             return true
         }
 
+        let mountAllowance = managedVirtualMountAllowance.begin(
+            baseVolumeName: "Velox Secure USB"
+        )
+        defer { managedVirtualMountAllowance.end(mountAllowance) }
         let attach = try run(
             "/usr/bin/hdiutil",
             arguments: ["attach", "-plist", "-stdinpass", bundlePath],

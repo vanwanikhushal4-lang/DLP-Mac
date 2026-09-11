@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 @preconcurrency import SafariServices
+import UniformTypeIdentifiers
 import WebKit
 import VeloxCore
 
@@ -8,10 +9,24 @@ import VeloxCore
 final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NSWindowDelegate {
     public static weak var current: ConsoleController?
 
-    private let controlClient = ExtensionControlClient()
+    private let controlClient: ExtensionControlClient
+    private let ocrService: OCRService
+    private let endpointDiscoveryService: EndpointDiscoveryService
     private var schemeHandler: BundledWebSchemeHandler?
     private var window: NSWindow?
     private var webView: WKWebView?
+    private var installedApplicationsCache: [InstalledApplication]?
+
+    init(
+        controlClient: ExtensionControlClient,
+        ocrService: OCRService,
+        endpointDiscoveryService: EndpointDiscoveryService
+    ) {
+        self.controlClient = controlClient
+        self.ocrService = ocrService
+        self.endpointDiscoveryService = endpointDiscoveryService
+        super.init()
+    }
 
     func broadcastLiveEvent(_ event: ExecutionEvent) {
         guard let data = try? JSONEncoder().encode(event),
@@ -102,6 +117,22 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
                 self?.deliver(requestId: requestId, json: json)
             }
 
+        case "setEmailAttachmentConfig":
+            let configJSON: String
+            if let string = body["config"] as? String {
+                configJSON = string
+            } else if let config = body["config"] as? [String: Any],
+                      let data = try? JSONSerialization.data(withJSONObject: config),
+                      let string = String(data: data, encoding: .utf8) {
+                configJSON = string
+            } else {
+                deliverError(requestId: requestId, message: "Missing Email Attachment Control configuration.")
+                return
+            }
+            controlClient.setEmailAttachmentConfig(configJSON) { [weak self] json in
+                self?.deliverSnapshot(requestId: requestId, extensionJSON: json)
+            }
+
         case "setUSBStorageMode":
             guard let mode = body["mode"] as? String else {
                 deliverError(requestId: requestId, message: "Missing usb-storage policy mode.")
@@ -146,6 +177,91 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
             controlClient.setPrinterMode(mode) { [weak self] json in
                 self?.deliver(requestId: requestId, json: json)
             }
+
+        case "setPrintToPDFMode":
+            guard let mode = body["mode"] as? String else {
+                deliverError(requestId: requestId, message: "Missing print-to-PDF mode.")
+                return
+            }
+            controlClient.setPrintToPDFMode(mode) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
+        case "setOCRMode":
+            guard let mode = body["mode"] as? String else {
+                deliverError(requestId: requestId, message: "Missing OCR policy mode.")
+                return
+            }
+            controlClient.setOCRMode(mode) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
+        case "setScreenshotOCRMode":
+            guard let mode = body["mode"] as? String else {
+                deliverError(requestId: requestId, message: "Missing screenshot OCR mode.")
+                return
+            }
+            controlClient.setScreenshotOCRMode(mode) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
+        case "setEndpointDiscoveryConfig":
+            let configJSON: String
+            if let string = body["config"] as? String {
+                configJSON = string
+            } else if let config = body["config"] as? [String: Any],
+                      let data = try? JSONSerialization.data(withJSONObject: config),
+                      let string = String(data: data, encoding: .utf8) {
+                configJSON = string
+            } else {
+                deliverError(requestId: requestId, message: "Missing Endpoint Data Discovery configuration.")
+                return
+            }
+            controlClient.setEndpointDiscoveryConfig(configJSON) { [weak self] json in
+                self?.deliverSnapshot(requestId: requestId, extensionJSON: json)
+            }
+
+        case "setOpticalDiskImageConfig":
+            let configJSON: String
+            if let string = body["config"] as? String {
+                configJSON = string
+            } else if let config = body["config"] as? [String: Any],
+                      let data = try? JSONSerialization.data(withJSONObject: config),
+                      let string = String(data: data, encoding: .utf8) {
+                configJSON = string
+            } else {
+                deliverError(
+                    requestId: requestId,
+                    message: "Missing Optical & Disk Image Control configuration."
+                )
+                return
+            }
+            controlClient.setOpticalDiskImageConfig(configJSON) { [weak self] json in
+                self?.deliverSnapshot(requestId: requestId, extensionJSON: json)
+            }
+
+        case "startEndpointDiscoveryScan":
+            deliver(
+                requestId: requestId,
+                encodable: endpointDiscoveryService.startScan(trigger: "manual")
+            )
+
+        case "getEndpointDiscoveryStatus":
+            deliver(requestId: requestId, encodable: endpointDiscoveryService.status())
+
+        case "openFullDiskAccessSettings":
+            if let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+            ) {
+                NSWorkspace.shared.open(url)
+            }
+            deliver(
+                requestId: requestId,
+                encodable: ErrorResponse(ok: true, message: "Full Disk Access settings opened.")
+            )
+
+        case "scanOCRFile":
+            chooseAndScanOCRFile(requestId: requestId)
 
         case "setNetworkFlowMode":
             guard let mode = body["mode"] as? String else {
@@ -247,9 +363,23 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
             }
 
         case "listApplications":
-            let apps = InstalledApplicationScanner.scan()
-            let response = ApplicationsResponse(ok: true, apps: apps, message: nil)
-            deliver(requestId: requestId, encodable: response)
+            let refresh = body["refresh"] as? Bool ?? false
+            if !refresh, let apps = installedApplicationsCache {
+                deliver(
+                    requestId: requestId,
+                    encodable: ApplicationsResponse(ok: true, apps: apps, message: nil)
+                )
+                return
+            }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let apps = await InstalledApplicationScanner.scan()
+                self.installedApplicationsCache = apps
+                self.deliver(
+                    requestId: requestId,
+                    encodable: ApplicationsResponse(ok: true, apps: apps, message: nil)
+                )
+            }
 
         default:
             deliverError(requestId: requestId, message: "Unsupported native action '\(action)'.")
@@ -298,6 +428,16 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
         snapshot["networkFilterStatus"] = status
         snapshot["networkFilterEnabled"] = status == "enabled"
         snapshot["networkFilterMessage"] = record?.details ?? "The Network Filter has not been activated yet."
+        let discovery = endpointDiscoveryService.status()
+        snapshot["endpointDiscoveryRunning"] = discovery.running
+        snapshot["endpointDiscoveryCurrentScanId"] = discovery.currentScanId
+        snapshot["endpointDiscoveryNextScheduledAt"] = discovery.nextScheduledAt
+        snapshot["endpointDiscoveryReportDirectory"] = discovery.reportDirectory
+        if let report = discovery.lastReport,
+           let reportData = try? JSONEncoder().encode(report),
+           let reportObject = try? JSONSerialization.jsonObject(with: reportData) {
+            snapshot["endpointDiscoveryLastReport"] = reportObject
+        }
 
         guard let enrichedData = try? JSONSerialization.data(
             withJSONObject: snapshot,
@@ -325,6 +465,76 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
             requestId: requestId,
             encodable: ErrorResponse(ok: false, message: message)
         )
+    }
+
+    private func chooseAndScanOCRFile(requestId: String) {
+        let panel = NSOpenPanel()
+        panel.title = "Test Velox OCR Classification"
+        panel.message = "Choose an image, PDF, or plain-text file. Extracted text stays in memory and is never returned to the console or activity log."
+        panel.prompt = "Scan"
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.image, .pdf, .text]
+
+        let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self else { return }
+            guard response == .OK, let url = panel.url else {
+                self.deliverError(requestId: requestId, message: "OCR scan cancelled.")
+                return
+            }
+            guard let data = try? Data(
+                contentsOf: URL(fileURLWithPath: PolicyManager.defaultPolicyPath),
+                options: [.mappedIfSafe]
+            ), let policy = try? VeloxPolicy.decodeStrict(from: data) else {
+                self.deliverError(requestId: requestId, message: "The active OCR policy could not be loaded.")
+                return
+            }
+
+            self.ocrService.analyze(
+                url: url,
+                config: policy.ocrControl,
+                source: "manual"
+            ) { [weak self] result in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    switch result {
+                    case .success(let report):
+                        self.recordOCRReport(report)
+                        self.deliver(requestId: requestId, encodable: report)
+                    case .failure(let error):
+                        self.deliverError(requestId: requestId, message: error.localizedDescription)
+                    }
+                }
+            }
+        }
+
+        if let window {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            completion(panel.runModal())
+        }
+    }
+
+    private func recordOCRReport(_ report: OCRScanReport) {
+        let payload: [String: Any] = [
+            "source": report.source,
+            "fileType": report.fileType,
+            "contentHashPrefix": report.contentHashPrefix,
+            "decision": report.decision,
+            "ruleIds": report.matches.map(\.ruleId),
+            "classifications": report.matches.map(\.classification),
+            "recognizedCharacterCount": report.recognizedCharacterCount,
+            "pageCount": report.pageCount,
+            "averageConfidence": report.averageConfidence,
+            "usedOCR": report.usedOCR,
+            "cacheHit": report.cacheHit,
+            "durationMillis": report.durationMillis,
+            "remediation": "none"
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        controlClient.recordOCRScanEvent(json) { _ in }
     }
 
     private func jsonStringLiteral(_ value: String) -> String {

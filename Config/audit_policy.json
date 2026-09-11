@@ -17,6 +17,14 @@
       "Downloads"
     ]
   },
+  "emailAttachmentControl": {
+    "mode": "audit-only",
+    "mailClients": [
+      { "ruleId": "email-apple-mail", "signingId": "com.apple.mail", "isPlatformBinary": true },
+      { "ruleId": "email-microsoft-outlook", "signingId": "com.microsoft.Outlook", "teamId": "UBF8T346G9" }
+    ],
+    "protectedClassifications": []
+  },
   "usbStorageControl": {
     "mode": "disabled",
     "blockExternalStorage": true,
@@ -40,6 +48,33 @@
   "printerControl": {
     "mode": "audit-only",
     "blockAllPrinters": true
+  },
+  "opticalDiskImageControl": {
+    "mode": "audit-only",
+    "blockDiskImages": true,
+    "blockOpticalMedia": true
+  },
+  "printToPDFControl": {
+    "mode": "audit-only",
+    "blockSaveAsPDF": true
+  },
+  "ocrControl": {
+    "mode": "audit-only",
+    "screenshotMode": "audit-only",
+    "screenshotRemediation": "quarantine",
+    "recognitionLanguages": ["en-US"],
+    "minimumConfidence": 0.5,
+    "maxFileSizeMB": 100,
+    "maxPDFPages": 100
+  },
+  "endpointDiscoveryControl": {
+    "mode": "audit-only",
+    "scheduleIntervalMinutes": 1440,
+    "includeLocalHome": true,
+    "includeMountedVolumes": true,
+    "includeMountedShares": true,
+    "tagClassifiedFiles": false,
+    "maxFilesPerScan": 10000
   },
   "networkFlowControl": {
     "mode": "audit-only",

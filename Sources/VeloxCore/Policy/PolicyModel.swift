@@ -182,6 +182,89 @@ public struct WebUploadControlConfig: Codable, Sendable, Equatable {
     }
 }
 
+/// Blocks native mail clients from reading files that Endpoint Discovery has
+/// already classified. This is intentionally an endpoint file-access control:
+/// macOS Endpoint Security does not expose recipients or a reliable Send event.
+public struct EmailAttachmentControlConfig: Codable, Sendable, Equatable {
+    public static let defaultMailClients: [ApplicationRule] = [
+        ApplicationRule(
+            ruleId: "email-apple-mail",
+            signingId: "com.apple.mail",
+            isPlatformBinary: true
+        ),
+        ApplicationRule(
+            ruleId: "email-microsoft-outlook",
+            signingId: "com.microsoft.Outlook",
+            teamId: "UBF8T346G9"
+        )
+    ]
+
+    public let mode: PolicyMode
+    public let mailClients: [ApplicationRule]
+    /// Empty means every active OCR classification is protected.
+    public let protectedClassifications: [String]
+
+    public init(
+        mode: PolicyMode = .disabled,
+        mailClients: [ApplicationRule] = EmailAttachmentControlConfig.defaultMailClients,
+        protectedClassifications: [String] = []
+    ) {
+        self.mode = mode
+        self.mailClients = mailClients
+        self.protectedClassifications = protectedClassifications
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decodeIfPresent(PolicyMode.self, forKey: .mode) ?? .disabled
+        self.mailClients = try container.decodeIfPresent(
+            [ApplicationRule].self,
+            forKey: .mailClients
+        ) ?? Self.defaultMailClients
+        self.protectedClassifications = try container.decodeIfPresent(
+            [String].self,
+            forKey: .protectedClassifications
+        ) ?? []
+    }
+
+    public func validate() throws {
+        guard !mailClients.isEmpty, mailClients.count <= 32 else {
+            throw PolicyValidationError.invalidCriterion(
+                "emailAttachmentControl.mailClients must contain between 1 and 32 securely identified clients"
+            )
+        }
+        var seenRuleIds = Set<String>()
+        for rule in mailClients {
+            try rule.validate(isAllowRule: true)
+            guard seenRuleIds.insert(rule.ruleId).inserted else {
+                throw PolicyValidationError.duplicateRuleId(
+                    "Duplicate email mail-client ruleId '\(rule.ruleId)'"
+                )
+            }
+        }
+
+        guard protectedClassifications.count <= 100 else {
+            throw PolicyValidationError.invalidCriterion(
+                "emailAttachmentControl.protectedClassifications cannot contain more than 100 values"
+            )
+        }
+        var seenClassifications = Set<String>()
+        for classification in protectedClassifications {
+            let trimmed = classification.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, trimmed.count <= 256 else {
+                throw PolicyValidationError.invalidCriterion(
+                    "emailAttachmentControl contains an invalid protected classification"
+                )
+            }
+            guard seenClassifications.insert(trimmed.lowercased()).inserted else {
+                throw PolicyValidationError.invalidCriterion(
+                    "Duplicate protected email classification '\(trimmed)'"
+                )
+            }
+        }
+    }
+}
+
 public struct USBStorageControlConfig: Codable, Sendable, Equatable {
     public let mode: PolicyMode
     public let blockExternalStorage: Bool
@@ -367,6 +450,458 @@ public struct PrinterControlConfig: Codable, Sendable, Equatable {
 
     public func validate() throws {
         // Enforced by Codable enum and Boolean decoding.
+    }
+}
+
+/// Classifies text extracted from images and scanned PDF pages.
+///
+/// Rules return privacy-safe identifiers and classification names. Matched OCR
+/// text must remain in memory and must never be written to the activity log.
+public enum OCRRuleType: String, Codable, Sendable, Equatable {
+    case keyword
+    case regularExpression = "regular-expression"
+    case creditCard = "credit-card"
+    case indianPAN = "indian-pan"
+    case aadhaar
+}
+
+public enum OCRScreenshotRemediation: String, Codable, Sendable, Equatable {
+    case quarantine
+    case delete
+}
+
+public struct OCRClassificationRule: Codable, Sendable, Equatable {
+    public let ruleId: String
+    public let name: String
+    public let classification: String
+    public let type: OCRRuleType
+    public let pattern: String?
+    public let keywords: [String]
+    public let minimumMatches: Int
+
+    public init(
+        ruleId: String,
+        name: String,
+        classification: String,
+        type: OCRRuleType,
+        pattern: String? = nil,
+        keywords: [String] = [],
+        minimumMatches: Int = 1
+    ) {
+        self.ruleId = ruleId
+        self.name = name
+        self.classification = classification
+        self.type = type
+        self.pattern = pattern
+        self.keywords = keywords
+        self.minimumMatches = minimumMatches
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.ruleId = try container.decode(String.self, forKey: .ruleId)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.classification = try container.decode(String.self, forKey: .classification)
+        self.type = try container.decode(OCRRuleType.self, forKey: .type)
+        self.pattern = try container.decodeIfPresent(String.self, forKey: .pattern)
+        self.keywords = try container.decodeIfPresent([String].self, forKey: .keywords) ?? []
+        self.minimumMatches = try container.decodeIfPresent(Int.self, forKey: .minimumMatches) ?? 1
+    }
+
+    public func validate() throws {
+        let trimmedRuleId = ruleId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedClassification = classification.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedRuleId.isEmpty, trimmedRuleId.count <= 256 else {
+            throw PolicyValidationError.emptyRuleId("OCR rule ID cannot be empty")
+        }
+        guard !trimmedName.isEmpty, trimmedName.count <= 256,
+              !trimmedClassification.isEmpty, trimmedClassification.count <= 256 else {
+            throw PolicyValidationError.emptyCriterion(
+                "OCR rule '\(ruleId)' requires a name and classification of at most 256 characters"
+            )
+        }
+        guard (1...100).contains(minimumMatches) else {
+            throw PolicyValidationError.invalidCriterion(
+                "OCR rule '\(ruleId)' minimumMatches must be between 1 and 100"
+            )
+        }
+
+        switch type {
+        case .keyword:
+            guard !keywords.isEmpty, keywords.count <= 64 else {
+                throw PolicyValidationError.invalidCriterion(
+                    "OCR keyword rule '\(ruleId)' must contain between 1 and 64 keywords"
+                )
+            }
+            var seen = Set<String>()
+            for keyword in keywords {
+                let normalized = keyword.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard !normalized.isEmpty, normalized.count <= 128 else {
+                    throw PolicyValidationError.invalidCriterion(
+                        "OCR keyword rule '\(ruleId)' contains an empty or oversized keyword"
+                    )
+                }
+                guard seen.insert(normalized).inserted else {
+                    throw PolicyValidationError.duplicateRuleId(
+                        "OCR keyword rule '\(ruleId)' contains duplicate keyword '\(normalized)'"
+                    )
+                }
+            }
+            guard pattern == nil else {
+                throw PolicyValidationError.invalidCriterion(
+                    "OCR keyword rule '\(ruleId)' cannot also define a regex pattern"
+                )
+            }
+        case .regularExpression:
+            guard keywords.isEmpty,
+                  let pattern,
+                  !pattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  pattern.count <= 512 else {
+                throw PolicyValidationError.invalidCriterion(
+                    "OCR regex rule '\(ruleId)' requires one pattern of at most 512 characters"
+                )
+            }
+            do {
+                _ = try NSRegularExpression(pattern: pattern)
+            } catch {
+                throw PolicyValidationError.invalidCriterion(
+                    "OCR regex rule '\(ruleId)' has an invalid pattern"
+                )
+            }
+        case .creditCard, .indianPAN, .aadhaar:
+            guard pattern == nil, keywords.isEmpty else {
+                throw PolicyValidationError.invalidCriterion(
+                    "Built-in OCR rule '\(ruleId)' cannot define pattern or keywords"
+                )
+            }
+        }
+    }
+}
+
+public struct OCRControlConfig: Codable, Sendable, Equatable {
+    public static let defaultRules: [OCRClassificationRule] = [
+        OCRClassificationRule(
+            ruleId: "ocr-payment-card",
+            name: "Payment card number",
+            classification: "Payment Card Data",
+            type: .creditCard
+        ),
+        OCRClassificationRule(
+            ruleId: "ocr-indian-pan",
+            name: "Indian PAN",
+            classification: "Indian Tax Identifier",
+            type: .indianPAN
+        ),
+        OCRClassificationRule(
+            ruleId: "ocr-aadhaar",
+            name: "Aadhaar number",
+            classification: "Indian Identity Data",
+            type: .aadhaar
+        ),
+        OCRClassificationRule(
+            ruleId: "ocr-confidential-keywords",
+            name: "Confidential document markers",
+            classification: "Confidential Document",
+            type: .keyword,
+            keywords: ["confidential", "restricted", "internal only"]
+        )
+    ]
+
+    public let mode: PolicyMode
+    public let screenshotMode: PolicyMode
+    public let screenshotRemediation: OCRScreenshotRemediation
+    public let recognitionLanguages: [String]
+    public let minimumConfidence: Double
+    public let maxFileSizeMB: Int
+    public let maxPDFPages: Int
+    public let rules: [OCRClassificationRule]
+
+    public init(
+        mode: PolicyMode = .disabled,
+        screenshotMode: PolicyMode = .disabled,
+        screenshotRemediation: OCRScreenshotRemediation = .quarantine,
+        recognitionLanguages: [String] = ["en-US"],
+        minimumConfidence: Double = 0.50,
+        maxFileSizeMB: Int = 100,
+        maxPDFPages: Int = 100,
+        rules: [OCRClassificationRule] = OCRControlConfig.defaultRules
+    ) {
+        self.mode = mode
+        self.screenshotMode = screenshotMode
+        self.screenshotRemediation = screenshotRemediation
+        self.recognitionLanguages = recognitionLanguages
+        self.minimumConfidence = minimumConfidence
+        self.maxFileSizeMB = maxFileSizeMB
+        self.maxPDFPages = maxPDFPages
+        self.rules = rules
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decodeIfPresent(PolicyMode.self, forKey: .mode) ?? .disabled
+        self.screenshotMode = try container.decodeIfPresent(
+            PolicyMode.self,
+            forKey: .screenshotMode
+        ) ?? .disabled
+        self.screenshotRemediation = try container.decodeIfPresent(
+            OCRScreenshotRemediation.self,
+            forKey: .screenshotRemediation
+        ) ?? .quarantine
+        self.recognitionLanguages = try container.decodeIfPresent(
+            [String].self,
+            forKey: .recognitionLanguages
+        ) ?? ["en-US"]
+        self.minimumConfidence = try container.decodeIfPresent(
+            Double.self,
+            forKey: .minimumConfidence
+        ) ?? 0.50
+        self.maxFileSizeMB = try container.decodeIfPresent(
+            Int.self,
+            forKey: .maxFileSizeMB
+        ) ?? 100
+        self.maxPDFPages = try container.decodeIfPresent(
+            Int.self,
+            forKey: .maxPDFPages
+        ) ?? 100
+        self.rules = try container.decodeIfPresent(
+            [OCRClassificationRule].self,
+            forKey: .rules
+        ) ?? Self.defaultRules
+    }
+
+    public func validate() throws {
+        guard (0...1).contains(minimumConfidence) else {
+            throw PolicyValidationError.invalidCriterion(
+                "ocrControl.minimumConfidence must be between 0 and 1"
+            )
+        }
+        guard (1...500).contains(maxFileSizeMB) else {
+            throw PolicyValidationError.invalidCriterion(
+                "ocrControl.maxFileSizeMB must be between 1 and 500"
+            )
+        }
+        guard (1...500).contains(maxPDFPages) else {
+            throw PolicyValidationError.invalidCriterion(
+                "ocrControl.maxPDFPages must be between 1 and 500"
+            )
+        }
+        guard !recognitionLanguages.isEmpty, recognitionLanguages.count <= 8 else {
+            throw PolicyValidationError.invalidCriterion(
+                "ocrControl.recognitionLanguages must contain between 1 and 8 language identifiers"
+            )
+        }
+        var seenLanguages = Set<String>()
+        for language in recognitionLanguages {
+            let trimmed = language.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  trimmed.count <= 35,
+                  trimmed.unicodeScalars.allSatisfy({
+                      CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_"
+                  }) else {
+                throw PolicyValidationError.invalidCriterion(
+                    "ocrControl contains an invalid recognition language identifier"
+                )
+            }
+            guard seenLanguages.insert(trimmed.lowercased()).inserted else {
+                throw PolicyValidationError.invalidCriterion(
+                    "ocrControl contains duplicate recognition language '\(trimmed)'"
+                )
+            }
+        }
+
+        guard rules.count <= 100 else {
+            throw PolicyValidationError.invalidCriterion(
+                "ocrControl.rules cannot contain more than 100 rules"
+            )
+        }
+        var seenRuleIds = Set<String>()
+        for rule in rules {
+            try rule.validate()
+            guard seenRuleIds.insert(rule.ruleId).inserted else {
+                throw PolicyValidationError.duplicateRuleId(
+                    "Duplicate OCR ruleId '\(rule.ruleId)' detected"
+                )
+            }
+        }
+    }
+}
+
+/// Scheduled at-rest discovery for user data, mounted local volumes, and
+/// mounted network shares. The host agent performs scans asynchronously so
+/// filesystem traversal and content extraction never consume an Endpoint
+/// Security authorization deadline.
+public struct EndpointDiscoveryControlConfig: Codable, Sendable, Equatable {
+    public let mode: PolicyMode
+    public let scheduleIntervalMinutes: Int
+    public let includeLocalHome: Bool
+    public let includeMountedVolumes: Bool
+    public let includeMountedShares: Bool
+    public let tagClassifiedFiles: Bool
+    public let maxFilesPerScan: Int
+
+    public init(
+        mode: PolicyMode = .disabled,
+        scheduleIntervalMinutes: Int = 1_440,
+        includeLocalHome: Bool = true,
+        includeMountedVolumes: Bool = true,
+        includeMountedShares: Bool = true,
+        tagClassifiedFiles: Bool = true,
+        maxFilesPerScan: Int = 10_000
+    ) {
+        self.mode = mode
+        self.scheduleIntervalMinutes = scheduleIntervalMinutes
+        self.includeLocalHome = includeLocalHome
+        self.includeMountedVolumes = includeMountedVolumes
+        self.includeMountedShares = includeMountedShares
+        self.tagClassifiedFiles = tagClassifiedFiles
+        self.maxFilesPerScan = maxFilesPerScan
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decodeIfPresent(PolicyMode.self, forKey: .mode) ?? .disabled
+        self.scheduleIntervalMinutes = try container.decodeIfPresent(
+            Int.self,
+            forKey: .scheduleIntervalMinutes
+        ) ?? 1_440
+        self.includeLocalHome = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .includeLocalHome
+        ) ?? true
+        self.includeMountedVolumes = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .includeMountedVolumes
+        ) ?? true
+        self.includeMountedShares = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .includeMountedShares
+        ) ?? true
+        self.tagClassifiedFiles = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .tagClassifiedFiles
+        ) ?? true
+        self.maxFilesPerScan = try container.decodeIfPresent(
+            Int.self,
+            forKey: .maxFilesPerScan
+        ) ?? 10_000
+    }
+
+    public func validate() throws {
+        guard (15...10_080).contains(scheduleIntervalMinutes) else {
+            throw PolicyValidationError.invalidCriterion(
+                "endpointDiscoveryControl.scheduleIntervalMinutes must be between 15 and 10080"
+            )
+        }
+        guard (100...100_000).contains(maxFilesPerScan) else {
+            throw PolicyValidationError.invalidCriterion(
+                "endpointDiscoveryControl.maxFilesPerScan must be between 100 and 100000"
+            )
+        }
+        guard includeLocalHome || includeMountedVolumes || includeMountedShares else {
+            throw PolicyValidationError.invalidCriterion(
+                "endpointDiscoveryControl must include at least one scan location"
+            )
+        }
+    }
+}
+
+// These policy shapes complete the already-wired console mutation methods. The
+// enforcement implementations remain separate features and must not be reported
+// as active merely because their policy can be stored.
+public struct CloudSyncControlConfig: Codable, Sendable, Equatable {
+    public let mode: PolicyMode
+    public let blockCloudSync: Bool
+    public let monitoredProviders: [String]
+
+    public init(
+        mode: PolicyMode = .disabled,
+        blockCloudSync: Bool = true,
+        monitoredProviders: [String] = ["iCloud", "OneDrive", "Google Drive", "Dropbox", "Box"]
+    ) {
+        self.mode = mode
+        self.blockCloudSync = blockCloudSync
+        self.monitoredProviders = monitoredProviders
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decodeIfPresent(PolicyMode.self, forKey: .mode) ?? .disabled
+        self.blockCloudSync = try container.decodeIfPresent(Bool.self, forKey: .blockCloudSync) ?? true
+        self.monitoredProviders = try container.decodeIfPresent(
+            [String].self,
+            forKey: .monitoredProviders
+        ) ?? ["iCloud", "OneDrive", "Google Drive", "Dropbox", "Box"]
+    }
+}
+
+public struct OpticalDiskImageControlConfig: Codable, Sendable, Equatable {
+    public let mode: PolicyMode
+    public let blockDiskImages: Bool
+    public let blockOpticalMedia: Bool
+
+    public init(
+        mode: PolicyMode = .disabled,
+        blockDiskImages: Bool = true,
+        blockOpticalMedia: Bool = true
+    ) {
+        self.mode = mode
+        self.blockDiskImages = blockDiskImages
+        self.blockOpticalMedia = blockOpticalMedia
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decodeIfPresent(PolicyMode.self, forKey: .mode) ?? .disabled
+        self.blockDiskImages = try container.decodeIfPresent(Bool.self, forKey: .blockDiskImages) ?? true
+        self.blockOpticalMedia = try container.decodeIfPresent(Bool.self, forKey: .blockOpticalMedia) ?? true
+    }
+
+    public func validate() throws {
+        guard mode == .disabled || blockDiskImages || blockOpticalMedia else {
+            throw PolicyValidationError.invalidCriterion(
+                "opticalDiskImageControl must select disk images, optical media, or both when active"
+            )
+        }
+    }
+}
+
+public struct ScreenWatermarkingConfig: Codable, Sendable, Equatable {
+    public let mode: PolicyMode
+    public let text: String
+    public let opacity: Double
+
+    public init(
+        mode: PolicyMode = .disabled,
+        text: String = "Protected by Velox DLP",
+        opacity: Double = 0.18
+    ) {
+        self.mode = mode
+        self.text = text
+        self.opacity = opacity
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decodeIfPresent(PolicyMode.self, forKey: .mode) ?? .disabled
+        self.text = try container.decodeIfPresent(String.self, forKey: .text) ?? "Protected by Velox DLP"
+        self.opacity = try container.decodeIfPresent(Double.self, forKey: .opacity) ?? 0.18
+    }
+}
+
+public struct PrintToPDFControlConfig: Codable, Sendable, Equatable {
+    public let mode: PolicyMode
+    public let blockSaveAsPDF: Bool
+
+    public init(mode: PolicyMode = .disabled, blockSaveAsPDF: Bool = true) {
+        self.mode = mode
+        self.blockSaveAsPDF = blockSaveAsPDF
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decodeIfPresent(PolicyMode.self, forKey: .mode) ?? .disabled
+        self.blockSaveAsPDF = try container.decodeIfPresent(Bool.self, forKey: .blockSaveAsPDF) ?? true
     }
 }
 
@@ -557,30 +1092,51 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
     public let policyVersion: Int
     public let applicationControl: ApplicationControlConfig
     public let webUploadControl: WebUploadControlConfig
+    public let emailAttachmentControl: EmailAttachmentControlConfig
     public let usbStorageControl: USBStorageControlConfig
     public let nearbyTransferControl: NearbyTransferControlConfig
     public let clipboardControl: ClipboardControlConfig
     public let printerControl: PrinterControlConfig
+    public let ocrControl: OCRControlConfig
+    public let endpointDiscoveryControl: EndpointDiscoveryControlConfig
     public let networkFlowControl: NetworkFlowControlConfig
+    public let cloudSyncControl: CloudSyncControlConfig
+    public let opticalDiskImageControl: OpticalDiskImageControlConfig
+    public let screenWatermarking: ScreenWatermarkingConfig
+    public let printToPDFControl: PrintToPDFControlConfig
 
     public init(
         policyVersion: Int,
         applicationControl: ApplicationControlConfig,
         webUploadControl: WebUploadControlConfig = WebUploadControlConfig(),
+        emailAttachmentControl: EmailAttachmentControlConfig = EmailAttachmentControlConfig(),
         usbStorageControl: USBStorageControlConfig = USBStorageControlConfig(),
         nearbyTransferControl: NearbyTransferControlConfig = NearbyTransferControlConfig(),
         clipboardControl: ClipboardControlConfig = ClipboardControlConfig(),
         printerControl: PrinterControlConfig = PrinterControlConfig(),
-        networkFlowControl: NetworkFlowControlConfig = NetworkFlowControlConfig()
+        ocrControl: OCRControlConfig = OCRControlConfig(),
+        endpointDiscoveryControl: EndpointDiscoveryControlConfig = EndpointDiscoveryControlConfig(),
+        networkFlowControl: NetworkFlowControlConfig = NetworkFlowControlConfig(),
+        cloudSyncControl: CloudSyncControlConfig = CloudSyncControlConfig(),
+        opticalDiskImageControl: OpticalDiskImageControlConfig = OpticalDiskImageControlConfig(),
+        screenWatermarking: ScreenWatermarkingConfig = ScreenWatermarkingConfig(),
+        printToPDFControl: PrintToPDFControlConfig = PrintToPDFControlConfig()
     ) {
         self.policyVersion = policyVersion
         self.applicationControl = applicationControl
         self.webUploadControl = webUploadControl
+        self.emailAttachmentControl = emailAttachmentControl
         self.usbStorageControl = usbStorageControl
         self.nearbyTransferControl = nearbyTransferControl
         self.clipboardControl = clipboardControl
         self.printerControl = printerControl
+        self.ocrControl = ocrControl
+        self.endpointDiscoveryControl = endpointDiscoveryControl
         self.networkFlowControl = networkFlowControl
+        self.cloudSyncControl = cloudSyncControl
+        self.opticalDiskImageControl = opticalDiskImageControl
+        self.screenWatermarking = screenWatermarking
+        self.printToPDFControl = printToPDFControl
     }
 
     public init(from decoder: Decoder) throws {
@@ -591,6 +1147,10 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             WebUploadControlConfig.self,
             forKey: .webUploadControl
         ) ?? WebUploadControlConfig()
+        self.emailAttachmentControl = try container.decodeIfPresent(
+            EmailAttachmentControlConfig.self,
+            forKey: .emailAttachmentControl
+        ) ?? EmailAttachmentControlConfig()
         self.usbStorageControl = try container.decodeIfPresent(
             USBStorageControlConfig.self,
             forKey: .usbStorageControl
@@ -607,10 +1167,34 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             PrinterControlConfig.self,
             forKey: .printerControl
         ) ?? PrinterControlConfig()
+        self.ocrControl = try container.decodeIfPresent(
+            OCRControlConfig.self,
+            forKey: .ocrControl
+        ) ?? OCRControlConfig()
+        self.endpointDiscoveryControl = try container.decodeIfPresent(
+            EndpointDiscoveryControlConfig.self,
+            forKey: .endpointDiscoveryControl
+        ) ?? EndpointDiscoveryControlConfig()
         self.networkFlowControl = try container.decodeIfPresent(
             NetworkFlowControlConfig.self,
             forKey: .networkFlowControl
         ) ?? NetworkFlowControlConfig()
+        self.cloudSyncControl = try container.decodeIfPresent(
+            CloudSyncControlConfig.self,
+            forKey: .cloudSyncControl
+        ) ?? CloudSyncControlConfig()
+        self.opticalDiskImageControl = try container.decodeIfPresent(
+            OpticalDiskImageControlConfig.self,
+            forKey: .opticalDiskImageControl
+        ) ?? OpticalDiskImageControlConfig()
+        self.screenWatermarking = try container.decodeIfPresent(
+            ScreenWatermarkingConfig.self,
+            forKey: .screenWatermarking
+        ) ?? ScreenWatermarkingConfig()
+        self.printToPDFControl = try container.decodeIfPresent(
+            PrintToPDFControlConfig.self,
+            forKey: .printToPDFControl
+        ) ?? PrintToPDFControlConfig()
     }
 
     /// Strictly parses and validates JSON data, rejecting any unknown properties or malformed fields.
@@ -624,11 +1208,18 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             "policyVersion",
             "applicationControl",
             "webUploadControl",
+            "emailAttachmentControl",
             "usbStorageControl",
             "nearbyTransferControl",
             "clipboardControl",
             "printerControl",
-            "networkFlowControl"
+            "ocrControl",
+            "endpointDiscoveryControl",
+            "networkFlowControl",
+            "cloudSyncControl",
+            "opticalDiskImageControl",
+            "screenWatermarking",
+            "printToPDFControl"
         ]
         for key in jsonObject.keys {
             if !validTopKeys.contains(key) {
@@ -681,6 +1272,24 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
                     throw PolicyValidationError.unknownProperty(
                         "Unknown property '\(key)' in webUploadControl"
                     )
+                }
+            }
+        }
+
+        if let emailObj = jsonObject["emailAttachmentControl"] as? [String: Any] {
+            let validEmailKeys: Set<String> = ["mode", "mailClients", "protectedClassifications"]
+            for key in emailObj.keys where !validEmailKeys.contains(key) {
+                throw PolicyValidationError.unknownProperty(
+                    "Unknown property '\(key)' in emailAttachmentControl"
+                )
+            }
+            if let mailClients = emailObj["mailClients"] as? [[String: Any]] {
+                for ruleDict in mailClients {
+                    for key in ruleDict.keys where !validRuleKeys.contains(key) {
+                        throw PolicyValidationError.unknownProperty(
+                            "Unknown property '\(key)' in emailAttachmentControl mail client"
+                        )
+                    }
                 }
             }
         }
@@ -751,6 +1360,60 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
             }
         }
 
+        if let ocrObj = jsonObject["ocrControl"] as? [String: Any] {
+            let validOCRKeys: Set<String> = [
+                "mode", "screenshotMode", "screenshotRemediation",
+                "recognitionLanguages", "minimumConfidence", "maxFileSizeMB",
+                "maxPDFPages", "rules"
+            ]
+            for key in ocrObj.keys where !validOCRKeys.contains(key) {
+                throw PolicyValidationError.unknownProperty(
+                    "Unknown property '\(key)' in ocrControl"
+                )
+            }
+            if let rules = ocrObj["rules"] as? [[String: Any]] {
+                let validOCRRuleKeys: Set<String> = [
+                    "ruleId", "name", "classification", "type",
+                    "pattern", "keywords", "minimumMatches"
+                ]
+                for rule in rules {
+                    for key in rule.keys where !validOCRRuleKeys.contains(key) {
+                        throw PolicyValidationError.unknownProperty(
+                            "Unknown property '\(key)' in ocrControl rule"
+                        )
+                    }
+                }
+            }
+        }
+
+        if let discoveryObj = jsonObject["endpointDiscoveryControl"] as? [String: Any] {
+            let validDiscoveryKeys: Set<String> = [
+                "mode", "scheduleIntervalMinutes", "includeLocalHome",
+                "includeMountedVolumes", "includeMountedShares",
+                "tagClassifiedFiles", "maxFilesPerScan"
+            ]
+            for key in discoveryObj.keys where !validDiscoveryKeys.contains(key) {
+                throw PolicyValidationError.unknownProperty(
+                    "Unknown property '\(key)' in endpointDiscoveryControl"
+                )
+            }
+        }
+
+        let supplementalObjects: [(String, Set<String>)] = [
+            ("cloudSyncControl", ["mode", "blockCloudSync", "monitoredProviders"]),
+            ("opticalDiskImageControl", ["mode", "blockDiskImages", "blockOpticalMedia"]),
+            ("screenWatermarking", ["mode", "text", "opacity"]),
+            ("printToPDFControl", ["mode", "blockSaveAsPDF"])
+        ]
+        for (objectName, validKeys) in supplementalObjects {
+            guard let object = jsonObject[objectName] as? [String: Any] else { continue }
+            for key in object.keys where !validKeys.contains(key) {
+                throw PolicyValidationError.unknownProperty(
+                    "Unknown property '\(key)' in \(objectName)"
+                )
+            }
+        }
+
         if let networkFlowObj = jsonObject["networkFlowControl"] as? [String: Any] {
             let validNetworkFlowKeys: Set<String> = ["mode", "defaultAction", "rules"]
             for key in networkFlowObj.keys {
@@ -799,11 +1462,35 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         }
 
         try webUploadControl.validate()
+        try emailAttachmentControl.validate()
         try usbStorageControl.validate()
         try nearbyTransferControl.validate()
         try clipboardControl.validate()
         try printerControl.validate()
+        try ocrControl.validate()
+        try endpointDiscoveryControl.validate()
+        try opticalDiskImageControl.validate()
+
+        let activeClassifications = Set(ocrControl.rules.map { $0.classification.lowercased() })
+        for classification in emailAttachmentControl.protectedClassifications {
+            guard activeClassifications.contains(classification.lowercased()) else {
+                throw PolicyValidationError.invalidCriterion(
+                    "Email classification '\(classification)' has no active OCR rule"
+                )
+            }
+        }
         try networkFlowControl.validate()
+
+        guard (0...1).contains(screenWatermarking.opacity) else {
+            throw PolicyValidationError.invalidCriterion(
+                "screenWatermarking.opacity must be between 0 and 1"
+            )
+        }
+        guard !screenWatermarking.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw PolicyValidationError.invalidCriterion(
+                "screenWatermarking.text cannot be empty"
+            )
+        }
 
         var seenRuleIds = Set<String>()
         for rule in applicationControl.allowedApplications {

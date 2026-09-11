@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import shieldLogo from "./assets/velox-shield.png";
 import "./styles.css";
 
 function showFatalError(message) {
@@ -32,10 +33,15 @@ function nativeCall(action, payload = {}) {
 
     const id = globalThis.crypto?.randomUUID?.()
       ?? `velox-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const timeoutMillis = action === "scanOCRFile"
+      ? 120000
+      : action === "listApplications"
+        ? 30000
+        : 8000;
     const timeout = setTimeout(() => {
       pendingCalls.delete(id);
       reject(new Error("The security extension did not respond."));
-    }, 8000);
+    }, timeoutMillis);
     pendingCalls.set(id, { resolve, reject, timeout });
     handler.postMessage({ id, action, ...payload });
   });
@@ -68,7 +74,7 @@ const networkFilterStatusCopy = {
 function ShieldMark() {
   return (
     <div className="shield-mark" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><path d="M12 2.4 20 5.6v5.7c0 5.1-3.3 8.7-8 10.3-4.7-1.6-8-5.2-8-10.3V5.6L12 2.4Zm0 3.1L7 7.4v3.9c0 3.4 1.9 5.9 5 7.2 3.1-1.3 5-3.8 5-7.2V7.4l-5-1.9Z" /></svg>
+      <img src={shieldLogo} alt="" />
     </div>
   );
 }
@@ -81,10 +87,14 @@ function FeatureIcon({ name }) {
   const paths = {
     applications: <><rect x="3.5" y="3.5" width="7" height="7" rx="2" /><rect x="13.5" y="3.5" width="7" height="7" rx="2" /><rect x="3.5" y="13.5" width="7" height="7" rx="2" /><rect x="13.5" y="13.5" width="7" height="7" rx="2" /></>,
     "web-upload": <><path d="M12 16V4" /><path d="m7.5 8.5 4.5-4.5 4.5 4.5" /><path d="M5 13.5v4.25A2.25 2.25 0 0 0 7.25 20h9.5A2.25 2.25 0 0 0 19 17.75V13.5" /></>,
+    email: <><rect x="3.5" y="5" width="17" height="14" rx="2.5" /><path d="m5 7 7 5.5L19 7" /><path d="M16.5 16.5 20 20" /><path d="M20 16.5 16.5 20" /></>,
     "usb-storage": <><path d="M12 3v13" /><path d="m8.5 6.5 3.5-3.5 3.5 3.5" /><path d="M12 11 7.5 15.5" /><circle cx="7" cy="16" r="1.5" /><path d="M12 13.5 16.5 18" /><rect x="15.2" y="17.2" width="2.6" height="2.6" rx=".5" /><path d="M12 16v4" /><circle cx="12" cy="20" r="1" /></>,
+    "optical-media": <><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="2.2" /><path d="M12 3.5v3M20.5 12h-3M12 20.5v-3M3.5 12h3" /></>,
     "nearby-transfer": <><circle cx="12" cy="12" r="1.6" /><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6" /><path d="M5.2 5.2a9.6 9.6 0 0 0 0 13.6M18.8 5.2a9.6 9.6 0 0 1 0 13.6" /></>,
     clipboard: <><rect x="5" y="5.5" width="14" height="15" rx="2.5" /><path d="M9 5.5V4.4A1.4 1.4 0 0 1 10.4 3h3.2A1.4 1.4 0 0 1 15 4.4v1.1" /><path d="M8.5 11h7M8.5 15h5" /></>,
     printer: <><path d="M7 9V4h10v5" /><rect x="4" y="9" width="16" height="8" rx="2.5" /><path d="M7 15h10v5H7z" /><circle cx="17" cy="12" r=".8" /></>,
+    ocr: <><path d="M5 3.5H3.5V8M19 3.5h1.5V8M5 20.5H3.5V16M19 20.5h1.5V16" /><path d="M7 8.5h10M7 12h10M7 15.5h7" /></>,
+    discovery: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /><path d="M8 9h6M8 12h4" /></>,
     "network-flow": <><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="12" cy="18" r="2.5" /><path d="M7.8 7.8 10.5 16" /><path d="M16.2 7.8 13.5 16" /><path d="M8.5 6h7" /></>,
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
@@ -163,11 +173,16 @@ function ClipboardAppRow({ app, selected, busy, onToggle }) {
 
 function EventRow({ event }) {
   const isUploadEvent = event.module === "web-upload-control";
+  const isEmailEvent = event.module === "email-attachment-control";
   const isClipboardEvent = event.module === "clipboard-control";
   const isUSBEvent = event.module === "usb-storage-control";
   const isUSBEncryptionEvent = event.module === "usb-encryption-control";
+  const isOpticalEvent = event.module === "optical-disk-image-control";
   const isNearbyEvent = event.module === "nearby-transfer-control";
   const isPrinterEvent = event.module === "printer-control";
+  const isPrintToPDFEvent = event.module === "print-to-pdf-control";
+  const isOCREvent = event.module === "ocr-content-classification";
+  const isDiscoveryEvent = event.module === "endpoint-data-discovery";
   const isNetworkFlowEvent = event.module === "network-flow-control";
   let appName = event.executablePath?.split("/").pop() || event.signingId || "Unknown";
   let detail = event.signingId || event.executablePath;
@@ -175,6 +190,9 @@ function EventRow({ event }) {
   if (isUploadEvent) {
     appName = event.resourcePath?.split("/").pop() || "Protected file";
     detail = `${event.signingId || "Browser"} · ${event.resourcePath || "Unknown file"}`;
+  } else if (isEmailEvent) {
+    appName = event.resourcePath?.split("/").pop() || "Classified attachment";
+    detail = `${event.interaction || event.signingId || "Native mail client"} · ${event.classifications?.join(", ") || "Classified content"}`;
   } else if (isClipboardEvent) {
     appName = event.pageURL || event.signingId || "Application";
     detail = `${event.resourcePath || "clipboard data"} · ${event.signingId || event.executablePath || "unknown source"}`;
@@ -187,6 +205,10 @@ function EventRow({ event }) {
     else if (event.action === "container-required") appName = "Encryption required";
     else appName = "Plaintext USB copy";
     detail = `${event.resourcePath || "External Drive"}`;
+  } else if (isOpticalEvent) {
+    const isPhysicalOptical = event.action?.startsWith("optical-media");
+    appName = isPhysicalOptical ? "Optical media mount" : "Disk image mount";
+    detail = event.resourcePath || (isPhysicalOptical ? "CD/DVD media" : "Virtual disk image");
   } else if (isNearbyEvent) {
     const channel = event.action?.startsWith("bluetooth")
       ? "Bluetooth"
@@ -198,6 +220,23 @@ function EventRow({ event }) {
   } else if (isPrinterEvent) {
     appName = event.action === "print-job-observed" ? "Print job observed" : "Printer queue";
     detail = event.resourcePath || "Unknown printer";
+  } else if (isPrintToPDFEvent) {
+    appName = event.resourcePath?.split("/").pop() || "PDF file output";
+    detail = `${event.signingId || event.executablePath?.split("/").pop() || "Application"} · New PDF output`;
+  } else if (isOCREvent) {
+    appName = event.action === "screenshot-scan" ? "Screenshot OCR" : "Content OCR";
+    const classifications = event.classifications?.length
+      ? event.classifications.join(", ")
+      : "No sensitive classification";
+    detail = `${classifications} · ${event.recognizedCharacterCount || 0} characters · ${event.pageCount || 1} page${event.pageCount === 1 ? "" : "s"}`;
+  } else if (isDiscoveryEvent) {
+    if (event.action === "scan-completed") {
+      appName = "Discovery scan completed";
+      detail = event.pageURL || `Scan ${event.resourcePath || ""}`;
+    } else {
+      appName = event.resourcePath?.split("/").pop() || "Classified file";
+      detail = `${event.classifications?.join(", ") || "Sensitive data"} · ${event.interaction || "at-rest scan"}`;
+    }
   } else if (isNetworkFlowEvent) {
     appName = event.resourcePath || "Network socket";
     const proc = event.signingId || event.executablePath?.split("/").pop() || "unknown app";
@@ -220,6 +259,8 @@ function App() {
   const [activeFeature, setActiveFeature] = useState("overview");
   const [snapshot, setSnapshot] = useState(null);
   const [apps, setApps] = useState([]);
+  const [appsLoading, setAppsLoading] = useState(true);
+  const [appsError, setAppsError] = useState("");
   const [events, setEvents] = useState([]);
   const [query, setQuery] = useState("");
   const [clipboardQuery, setClipboardQuery] = useState("");
@@ -227,11 +268,18 @@ function App() {
   const [busyClipboardApp, setBusyClipboardApp] = useState(null);
   const [busyMode, setBusyMode] = useState(false);
   const [busyWebUpload, setBusyWebUpload] = useState(false);
+  const [busyEmailAttachment, setBusyEmailAttachment] = useState(false);
   const [busyUSBStorage, setBusyUSBStorage] = useState(false);
   const [busyUSBEncryption, setBusyUSBEncryption] = useState(false);
+  const [busyOpticalDiskImage, setBusyOpticalDiskImage] = useState(false);
   const [busyNearbyTransfer, setBusyNearbyTransfer] = useState(false);
   const [busyClipboardMode, setBusyClipboardMode] = useState(false);
   const [busyPrinter, setBusyPrinter] = useState(false);
+  const [busyPrintToPDF, setBusyPrintToPDF] = useState(false);
+  const [busyOCR, setBusyOCR] = useState(false);
+  const [busyScreenshotOCR, setBusyScreenshotOCR] = useState(false);
+  const [ocrReport, setOCRReport] = useState(null);
+  const [busyDiscovery, setBusyDiscovery] = useState(false);
   const [busyNetworkFlow, setBusyNetworkFlow] = useState(false);
   const [busyNetworkAction, setBusyNetworkAction] = useState(false);
   const [busyRuleAction, setBusyRuleAction] = useState(false);
@@ -259,16 +307,24 @@ function App() {
         let label = event.executablePath?.split("/").pop() || event.signingId || "Resource";
         if (event.module === "web-upload-control") {
           label = event.resourcePath?.split("/").pop() || "Protected File";
+        } else if (event.module === "email-attachment-control") {
+          label = event.resourcePath?.split("/").pop() || "Classified attachment";
         } else if (event.module === "clipboard-control") {
           label = event.pageURL || event.signingId || "Clipboard copy";
         } else if (event.module === "usb-storage-control") {
           label = event.resourcePath || "USB Device";
         } else if (event.module === "usb-encryption-control") {
           label = event.resourcePath?.split("/").pop() || "USB Device";
+        } else if (event.module === "optical-disk-image-control") {
+          label = event.action?.startsWith("optical-media") ? "Optical media" : "Disk image";
         } else if (event.module === "nearby-transfer-control") {
           label = event.resourcePath?.split("/").pop() || "Protected File";
         } else if (event.module === "printer-control") {
           label = event.resourcePath || "Printer";
+        } else if (event.module === "print-to-pdf-control") {
+          label = event.resourcePath?.split("/").pop() || "PDF file output";
+        } else if (event.module === "ocr-content-classification") {
+          label = event.action === "screenshot-scan" ? "Sensitive screenshot" : "Sensitive visual document";
         } else if (event.module === "network-flow-control") {
           label = event.resourcePath || "Network Connection";
         }
@@ -310,16 +366,29 @@ function App() {
     }
   }, []);
 
+  const refreshApplications = useCallback(async (force = false) => {
+    setAppsLoading(true);
+    setAppsError("");
+    try {
+      const value = await nativeCall("listApplications", { refresh: force });
+      setApps(value.apps || []);
+    } catch (err) {
+      setAppsError(err.message || "Application discovery failed.");
+    } finally {
+      setAppsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     refreshSnapshot();
     refreshEvents();
-    nativeCall("listApplications").then(value => setApps(value.apps || [])).catch(err => setError(err.message));
+    refreshApplications();
     const timer = setInterval(() => {
       refreshSnapshot();
       refreshEvents();
     }, 3000);
     return () => clearInterval(timer);
-  }, [refreshEvents, refreshSnapshot]);
+  }, [refreshApplications, refreshEvents, refreshSnapshot]);
 
   const blockedSigningIds = useMemo(() => new Set(snapshot?.blockedSigningIds || []), [snapshot]);
   const blockedPaths = useMemo(() => new Set(snapshot?.blockedExecutablePaths || []), [snapshot]);
@@ -388,6 +457,37 @@ function App() {
     }
   }
 
+  async function changeEmailAttachmentConfig(mode, protectedClassifications = emailProtectedClassifications) {
+    setBusyEmailAttachment(true);
+    setNotice("");
+    try {
+      const mailClients = [
+        { ruleId: "email-apple-mail", signingId: "com.apple.mail", isPlatformBinary: true },
+        { ruleId: "email-microsoft-outlook", signingId: "com.microsoft.Outlook", teamId: "UBF8T346G9" },
+      ];
+      const value = await nativeCall("setEmailAttachmentConfig", {
+        config: { mode, mailClients, protectedClassifications },
+      });
+      setSnapshot(value);
+      setNotice(`Native email attachment protection is now ${modeCopy[mode].label.toLowerCase()}.`);
+      await refreshEvents();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyEmailAttachment(false);
+    }
+  }
+
+  function toggleEmailClassification(classification) {
+    const selected = emailProtectedClassifications.length
+      ? emailProtectedClassifications
+      : ocrClassifications;
+    const next = selected.includes(classification)
+      ? selected.filter(value => value !== classification)
+      : [...selected, classification];
+    changeEmailAttachmentConfig(emailAttachmentMode, next.length === ocrClassifications.length ? [] : next);
+  }
+
   async function changeUSBStorageMode(mode) {
     setBusyUSBStorage(true);
     setNotice("");
@@ -416,6 +516,28 @@ function App() {
       setError(err.message);
     } finally {
       setBusyUSBEncryption(false);
+    }
+  }
+
+  async function changeOpticalDiskImageConfig(changes) {
+    setBusyOpticalDiskImage(true);
+    setNotice("");
+    setError("");
+    try {
+      const config = {
+        mode: opticalDiskImageMode,
+        blockDiskImages: opticalDiskImageBlocksDiskImages,
+        blockOpticalMedia: opticalDiskImageBlocksOpticalMedia,
+        ...changes,
+      };
+      const value = await nativeCall("setOpticalDiskImageConfig", { config });
+      setSnapshot(value);
+      setNotice(`Optical and disk-image protection is now ${modeCopy[config.mode].label.toLowerCase()}.`);
+      await refreshEvents();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyOpticalDiskImage(false);
     }
   }
 
@@ -466,6 +588,120 @@ function App() {
       setError(err.message);
     } finally {
       setBusyPrinter(false);
+    }
+  }
+
+  async function changePrintToPDFMode(mode) {
+    setBusyPrintToPDF(true);
+    setNotice("");
+    setError("");
+    try {
+      const value = await nativeCall("setPrintToPDFMode", { mode });
+      setSnapshot(value);
+      setNotice(`Print-to-PDF / File Control is now ${modeCopy[mode].label.toLowerCase()}.`);
+      await refreshEvents();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyPrintToPDF(false);
+    }
+  }
+
+  async function changeOCRMode(mode) {
+    setBusyOCR(true);
+    setNotice("");
+    setError("");
+    try {
+      const value = await nativeCall("setOCRMode", { mode });
+      setSnapshot(value);
+      setNotice(`Image and scanned-PDF classification is now ${modeCopy[mode].label.toLowerCase()}.`);
+      await refreshEvents();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyOCR(false);
+    }
+  }
+
+  async function changeScreenshotOCRMode(mode) {
+    setBusyScreenshotOCR(true);
+    setNotice("");
+    setError("");
+    try {
+      const value = await nativeCall("setScreenshotOCRMode", { mode });
+      setSnapshot(value);
+      setNotice(`Screenshot OCR is now ${modeCopy[mode].label.toLowerCase()}.`);
+      await refreshEvents();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyScreenshotOCR(false);
+    }
+  }
+
+  async function scanOCRFile() {
+    setBusyOCR(true);
+    setOCRReport(null);
+    setNotice("");
+    setError("");
+    try {
+      const report = await nativeCall("scanOCRFile");
+      setOCRReport(report);
+      setNotice(`OCR analyzed ${report.fileName} locally without exposing extracted text.`);
+      await refreshEvents();
+    } catch (err) {
+      if (err.message !== "OCR scan cancelled.") setError(err.message);
+    } finally {
+      setBusyOCR(false);
+    }
+  }
+
+  async function changeEndpointDiscoveryConfig(patch) {
+    setBusyDiscovery(true);
+    setNotice("");
+    setError("");
+    try {
+      const config = {
+        mode: patch.mode ?? endpointDiscoveryMode,
+        scheduleIntervalMinutes: patch.scheduleIntervalMinutes ?? endpointDiscoveryScheduleIntervalMinutes,
+        includeLocalHome: patch.includeLocalHome ?? endpointDiscoveryIncludesLocalHome,
+        includeMountedVolumes: patch.includeMountedVolumes ?? endpointDiscoveryIncludesMountedVolumes,
+        includeMountedShares: patch.includeMountedShares ?? endpointDiscoveryIncludesMountedShares,
+        tagClassifiedFiles: patch.tagClassifiedFiles ?? endpointDiscoveryTagsClassifiedFiles,
+        maxFilesPerScan: patch.maxFilesPerScan ?? endpointDiscoveryMaxFilesPerScan,
+      };
+      const value = await nativeCall("setEndpointDiscoveryConfig", { config });
+      setSnapshot(value);
+      setNotice(`Endpoint Data Discovery is now ${modeCopy[config.mode].label.toLowerCase()}.`);
+      await refreshEvents();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyDiscovery(false);
+    }
+  }
+
+  async function startEndpointDiscoveryScan() {
+    setBusyDiscovery(true);
+    setNotice("");
+    setError("");
+    try {
+      const status = await nativeCall("startEndpointDiscoveryScan");
+      setNotice(status.message || "Endpoint Data Discovery scan started.");
+      await refreshSnapshot();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyDiscovery(false);
+    }
+  }
+
+  async function openFullDiskAccessSettings() {
+    try {
+      const response = await nativeCall("openFullDiskAccessSettings");
+      setNotice(response.message || "Full Disk Access settings opened.");
+    } catch (err) {
+      setError(err.message);
     }
   }
 
@@ -591,15 +827,39 @@ function App() {
   const online = snapshot?.extensionStatus === "enforcing";
   const mode = snapshot?.mode || "audit-only";
   const webUploadMode = snapshot?.webUploadMode || "disabled";
+  const emailAttachmentMode = snapshot?.emailAttachmentMode || "disabled";
+  const emailClientCount = snapshot?.emailClientCount || 0;
+  const emailProtectedClassifications = snapshot?.emailProtectedClassifications || [];
+  const emailCachedClassificationCount = snapshot?.emailCachedClassificationCount || 0;
   const usbStorageMode = snapshot?.usbStorageMode || "enforce";
   const usbEncryptionMode = snapshot?.usbEncryptionMode || "disabled";
   const usbExternalVolumeCount = snapshot?.usbExternalVolumeCount || 0;
   const usbEncryptedContainerCount = snapshot?.usbEncryptedContainerCount || 0;
+  const opticalDiskImageMode = snapshot?.opticalDiskImageMode || "disabled";
+  const opticalDiskImageBlocksDiskImages = snapshot?.opticalDiskImageBlocksDiskImages !== false;
+  const opticalDiskImageBlocksOpticalMedia = snapshot?.opticalDiskImageBlocksOpticalMedia !== false;
   const nearbyTransferMode = snapshot?.nearbyTransferMode || "disabled";
   const clipboardMode = snapshot?.clipboardMode || "disabled";
   const printerMode = snapshot?.printerMode || "disabled";
+  const printToPDFMode = snapshot?.printToPDFMode || "disabled";
   const printerQueueCount = snapshot?.printerQueueCount || 0;
   const printerControlledQueueCount = snapshot?.printerControlledQueueCount || 0;
+  const ocrMode = snapshot?.ocrMode || "disabled";
+  const screenshotOCRMode = snapshot?.screenshotOCRMode || "disabled";
+  const screenshotOCRRemediation = snapshot?.screenshotOCRRemediation || "quarantine";
+  const ocrRuleCount = snapshot?.ocrRuleCount || 0;
+  const ocrRecognitionLanguages = snapshot?.ocrRecognitionLanguages || [];
+  const ocrClassifications = snapshot?.ocrClassifications || [];
+  const endpointDiscoveryMode = snapshot?.endpointDiscoveryMode || "disabled";
+  const endpointDiscoveryScheduleIntervalMinutes = snapshot?.endpointDiscoveryScheduleIntervalMinutes || 1440;
+  const endpointDiscoveryIncludesLocalHome = snapshot?.endpointDiscoveryIncludesLocalHome !== false;
+  const endpointDiscoveryIncludesMountedVolumes = snapshot?.endpointDiscoveryIncludesMountedVolumes !== false;
+  const endpointDiscoveryIncludesMountedShares = snapshot?.endpointDiscoveryIncludesMountedShares !== false;
+  const endpointDiscoveryTagsClassifiedFiles = snapshot?.endpointDiscoveryTagsClassifiedFiles !== false;
+  const endpointDiscoveryMaxFilesPerScan = snapshot?.endpointDiscoveryMaxFilesPerScan || 10000;
+  const endpointDiscoveryRunning = snapshot?.endpointDiscoveryRunning === true;
+  const endpointDiscoveryLastReport = snapshot?.endpointDiscoveryLastReport || null;
+  const endpointDiscoveryNextScheduledAt = snapshot?.endpointDiscoveryNextScheduledAt || null;
   const networkFlowMode = snapshot?.networkFlowMode || "disabled";
   const networkFlowDefaultAction = snapshot?.networkFlowDefaultAction || "allow";
   const networkFlowRules = snapshot?.networkFlowRules || [];
@@ -616,8 +876,14 @@ function App() {
     if (activeFeature === "web-upload") {
       return event.module === "web-upload-control";
     }
+    if (activeFeature === "email") {
+      return event.module === "email-attachment-control";
+    }
     if (activeFeature === "usb-storage") {
       return event.module === "usb-storage-control" || event.module === "usb-encryption-control";
+    }
+    if (activeFeature === "optical-media") {
+      return event.module === "optical-disk-image-control";
     }
     if (activeFeature === "nearby-transfer") {
       return event.module === "nearby-transfer-control";
@@ -626,40 +892,61 @@ function App() {
       return event.module === "clipboard-control";
     }
     if (activeFeature === "printer") {
-      return event.module === "printer-control";
+      return event.module === "printer-control" || event.module === "print-to-pdf-control";
+    }
+    if (activeFeature === "ocr") {
+      return event.module === "ocr-content-classification";
+    }
+    if (activeFeature === "discovery") {
+      return event.module === "endpoint-data-discovery";
     }
     if (activeFeature === "network-flow") {
       return event.module === "network-flow-control";
     }
-    return event.module !== "web-upload-control" && event.module !== "clipboard-control" && event.module !== "usb-storage-control" && event.module !== "usb-encryption-control" && event.module !== "nearby-transfer-control" && event.module !== "printer-control" && event.module !== "network-flow-control";
+    return event.module !== "web-upload-control" && event.module !== "email-attachment-control" && event.module !== "clipboard-control" && event.module !== "usb-storage-control" && event.module !== "usb-encryption-control" && event.module !== "optical-disk-image-control" && event.module !== "nearby-transfer-control" && event.module !== "printer-control" && event.module !== "print-to-pdf-control" && event.module !== "ocr-content-classification" && event.module !== "endpoint-data-discovery" && event.module !== "network-flow-control";
   });
 
   const recentUploadBlocks = events.filter(event => event.module === "web-upload-control" && event.decision === "blocked").length;
+  const recentEmailBlocks = events.filter(event => event.module === "email-attachment-control" && event.decision === "blocked").length;
   const recentUSBBlocks = events.filter(event => event.module === "usb-storage-control" && event.decision === "blocked").length;
   const recentUSBEncryptionBlocks = events.filter(event => event.module === "usb-encryption-control" && event.decision === "blocked").length;
+  const recentOpticalBlocks = events.filter(event => event.module === "optical-disk-image-control" && event.decision === "blocked").length;
   const recentNearbyBlocks = events.filter(event => event.module === "nearby-transfer-control" && event.decision === "blocked").length;
   const recentClipboardBlocks = events.filter(event => event.module === "clipboard-control" && event.decision === "blocked").length;
   const recentPrinterBlocks = events.filter(event => event.module === "printer-control" && event.decision === "blocked").length;
+  const recentPrintToPDFBlocks = events.filter(event => event.module === "print-to-pdf-control" && event.decision === "blocked").length;
+  const recentOCRBlocks = events.filter(event => event.module === "ocr-content-classification" && event.decision === "blocked").length;
+  const recentDiscoveryFindings = events.filter(event => event.module === "endpoint-data-discovery" && event.action === "classified-file").length;
   const recentNetworkBlocks = events.filter(event => event.module === "network-flow-control" && event.decision === "blocked").length;
   const recentBlockedTotal = events.filter(event => event.decision === "blocked").length;
 
   const usbProtectionActive = usbStorageMode === "enforce" || usbEncryptionMode === "enforce";
+  const printerProtectionActive = printerMode === "enforce" || printToPDFMode === "enforce";
+  const printerProtectionAuditing = !printerProtectionActive && (printerMode === "audit-only" || printToPDFMode === "audit-only");
   const activeProtectionCount = snapshot ? [
     mode === "enforce",
     webUploadMode === "enforce",
+    emailAttachmentMode === "enforce",
     usbProtectionActive,
+    opticalDiskImageMode === "enforce",
     nearbyTransferMode === "enforce",
     clipboardMode !== "disabled",
-    printerMode === "enforce",
+    printerProtectionActive,
+    ocrMode === "enforce" || screenshotOCRMode === "enforce",
+    endpointDiscoveryMode === "enforce",
     networkFlowMode === "enforce" && networkFilterEnabled,
   ].filter(Boolean).length : 0;
-  const protectionCoverage = Math.round((activeProtectionCount / 7) * 100);
+  const protectionCoverage = Math.round((activeProtectionCount / 11) * 100);
   const auditOnlyCount = snapshot ? [
     mode,
     webUploadMode,
+    emailAttachmentMode,
     usbEncryptionMode !== "disabled" ? usbEncryptionMode : usbStorageMode,
+    opticalDiskImageMode,
     nearbyTransferMode,
-    printerMode,
+    printerMode === "audit-only" || printToPDFMode === "audit-only" ? "audit-only" : "disabled",
+    ocrMode === "audit-only" || screenshotOCRMode === "audit-only" ? "audit-only" : "disabled",
+    endpointDiscoveryMode,
     networkFlowMode,
   ].filter(value => value === "audit-only").length : 0;
   const orderedEvents = useMemo(
@@ -691,6 +978,15 @@ function App() {
       tone: webUploadMode === "enforce" ? "secure" : webUploadMode === "audit-only" ? "watching" : "inactive",
     },
     {
+      id: "email",
+      icon: "email",
+      title: "Email Attachments",
+      description: "Classified native-mail file control",
+      status: modeCopy[emailAttachmentMode]?.label || "Unknown",
+      detail: `${emailCachedClassificationCount} classified file${emailCachedClassificationCount === 1 ? "" : "s"} cached`,
+      tone: emailAttachmentMode === "enforce" ? "secure" : emailAttachmentMode === "audit-only" ? "watching" : "inactive",
+    },
+    {
       id: "usb-storage",
       icon: "usb-storage",
       title: "USB Storage",
@@ -698,6 +994,15 @@ function App() {
       status: usbEncryptionMode === "enforce" ? "Encrypted" : modeCopy[usbStorageMode]?.label || "Unknown",
       detail: usbEncryptionMode === "enforce" ? `${usbEncryptedContainerCount}/${usbExternalVolumeCount} containers ready` : `${recentUSBBlocks} mount attempts blocked`,
       tone: usbProtectionActive ? "secure" : (usbStorageMode === "audit-only" || usbEncryptionMode === "audit-only") ? "watching" : "inactive",
+    },
+    {
+      id: "optical-media",
+      icon: "optical-media",
+      title: "Optical & Disk Images",
+      description: "DMG, ISO and optical-media mount control",
+      status: modeCopy[opticalDiskImageMode]?.label || "Unknown",
+      detail: `${recentOpticalBlocks} recent block${recentOpticalBlocks === 1 ? "" : "s"}`,
+      tone: opticalDiskImageMode === "enforce" ? "secure" : opticalDiskImageMode === "audit-only" ? "watching" : "inactive",
     },
     {
       id: "nearby-transfer",
@@ -721,10 +1026,34 @@ function App() {
       id: "printer",
       icon: "printer",
       title: "Printer Control",
-      description: "Physical CUPS queue policy",
-      status: modeCopy[printerMode]?.label || "Unknown",
-      detail: `${printerControlledQueueCount}/${printerQueueCount} queues controlled`,
-      tone: printerMode === "enforce" ? "secure" : printerMode === "audit-only" ? "watching" : "inactive",
+      description: "Physical printing and PDF file output",
+      status: printerProtectionActive ? "Enforce" : printerProtectionAuditing ? "Audit only" : "Disabled",
+      detail: `${printerControlledQueueCount}/${printerQueueCount} queues · ${recentPrintToPDFBlocks} PDF blocks`,
+      tone: printerProtectionActive ? "secure" : printerProtectionAuditing ? "watching" : "inactive",
+    },
+    {
+      id: "ocr",
+      icon: "ocr",
+      title: "OCR Classification",
+      description: "On-device image and scanned-PDF analysis",
+      status: modeCopy[ocrMode]?.label || "Unknown",
+      detail: `${ocrRuleCount} rules · ${recentOCRBlocks} recent blocks`,
+      tone: ocrMode === "enforce" || screenshotOCRMode === "enforce"
+        ? "secure"
+        : ocrMode === "audit-only" || screenshotOCRMode === "audit-only"
+          ? "watching"
+          : "inactive",
+    },
+    {
+      id: "discovery",
+      icon: "discovery",
+      title: "Data Discovery",
+      description: "Scheduled at-rest classification",
+      status: endpointDiscoveryRunning ? "Scanning" : modeCopy[endpointDiscoveryMode]?.label || "Unknown",
+      detail: endpointDiscoveryLastReport
+        ? `${endpointDiscoveryLastReport.findingsCount} finding${endpointDiscoveryLastReport.findingsCount === 1 ? "" : "s"} in last scan`
+        : `${recentDiscoveryFindings} recent finding${recentDiscoveryFindings === 1 ? "" : "s"}`,
+      tone: endpointDiscoveryMode === "enforce" ? "secure" : endpointDiscoveryMode === "audit-only" ? "watching" : "inactive",
     },
     {
       id: "network-flow",
@@ -757,9 +1086,17 @@ function App() {
       title: "Web Upload Control",
       subtitle: "Prevent protected files from leaving this Mac through supported browsers."
     },
+    "email": {
+      title: "Email Attachment Control",
+      subtitle: "Stop already-classified files from being attached through trusted native mail clients."
+    },
     "usb-storage": {
       title: "USB Removable Media Control",
       subtitle: "Block removable storage or require all outbound files to use an encrypted container."
+    },
+    "optical-media": {
+      title: "Optical & Disk Image Control",
+      subtitle: "Prevent DMG, ISO, sparse image, CD and DVD volumes from mounting."
     },
     "nearby-transfer": {
       title: "AirDrop & Bluetooth Control",
@@ -772,6 +1109,14 @@ function App() {
     "printer": {
       title: "Printer Control",
       subtitle: "Audit or block physical printing through the local macOS print system."
+    },
+    "ocr": {
+      title: "OCR Content Classification",
+      subtitle: "Recognize sensitive text in images, scanned PDFs, and screenshots entirely on this Mac."
+    },
+    "discovery": {
+      title: "Endpoint Data Discovery",
+      subtitle: "Schedule at-rest scans across local user data, mounted volumes, and network shares."
     },
     "network-flow": {
       title: "Network Flow Control",
@@ -787,9 +1132,13 @@ function App() {
           <button className={activeFeature === "overview" ? "active" : ""} onClick={() => setActiveFeature("overview")}><span>⌂</span>Overview</button>
           <button className={activeFeature === "applications" ? "active" : ""} onClick={() => setActiveFeature("applications")}><span>▦</span>Application Control</button>
           <button className={activeFeature === "web-upload" ? "active" : ""} onClick={() => setActiveFeature("web-upload")}><span>⇧</span>Web Upload Control</button>
+          <button className={activeFeature === "email" ? "active" : ""} onClick={() => setActiveFeature("email")}><span>✉</span>Email Attachment Control</button>
           <button className={activeFeature === "clipboard" ? "active" : ""} onClick={() => setActiveFeature("clipboard")}><span>▣</span>Clipboard Control</button>
           <button className={activeFeature === "printer" ? "active" : ""} onClick={() => setActiveFeature("printer")}><span>▤</span>Printer Control</button>
+          <button className={activeFeature === "ocr" ? "active" : ""} onClick={() => setActiveFeature("ocr")}><span>⌗</span>OCR Classification</button>
+          <button className={activeFeature === "discovery" ? "active" : ""} onClick={() => setActiveFeature("discovery")}><span>⌕</span>Data Discovery</button>
           <button className={activeFeature === "usb-storage" ? "active" : ""} onClick={() => setActiveFeature("usb-storage")}><span>⏏</span>USB Storage Control</button>
+          <button className={activeFeature === "optical-media" ? "active" : ""} onClick={() => setActiveFeature("optical-media")}><span>◉</span>Optical & Disk Images</button>
           <button className={activeFeature === "nearby-transfer" ? "active" : ""} onClick={() => setActiveFeature("nearby-transfer")}><span>⌁</span>AirDrop & Bluetooth</button>
           <button className={activeFeature === "network-flow" ? "active" : ""} onClick={() => setActiveFeature("network-flow")}><span>☍</span>Network Flow</button>
           <button disabled><span>≋</span>Activity</button>
@@ -832,7 +1181,7 @@ function App() {
             <div className="overview-hero-copy">
               <div className={`hero-state ${online ? "secure" : "attention"}`}><i />{online ? "Live local enforcement" : "Protection service offline"}</div>
               <h2>{online ? "Protection is active." : "This Mac needs attention."}</h2>
-              <p>{online ? `Velox is enforcing the latest local policy across ${activeProtectionCount} of 7 control surfaces.` : "Reconnect the privileged security extension to restore policy enforcement."}</p>
+              <p>{online ? `Velox is enforcing the latest local policy across ${activeProtectionCount} of 11 control surfaces.` : "Reconnect the privileged security extension to restore policy enforcement."}</p>
               <div className="hero-meta">
                 <span><b>v{snapshot?.policyVersion ?? "—"}</b> policy</span>
                 <span><b>{recentBlockedTotal}</b> recent blocks</span>
@@ -840,11 +1189,11 @@ function App() {
               </div>
               <button className="hero-action" onClick={() => setActiveFeature("applications")}><span>Manage protection</span><b>›</b></button>
             </div>
-            <div className="protection-visual" aria-label={`${activeProtectionCount} of 7 controls active`}>
+            <div className="protection-visual" aria-label={`${activeProtectionCount} of 11 controls active`}>
               <div className="coverage-orbit" style={{ "--coverage-degrees": `${protectionCoverage * 3.6}deg` }}>
                 <div className="coverage-orbit-inner">
                   <ShieldMark />
-                  <strong>{activeProtectionCount}<span>/7</span></strong>
+                  <strong>{activeProtectionCount}<span>/11</span></strong>
                   <small>controls active</small>
                 </div>
               </div>
@@ -919,12 +1268,25 @@ function App() {
 
           <section className="panel applications-panel">
             <div className="panel-heading">
-              <div><h2>Applications</h2><p>{apps.length ? `${apps.length} applications discovered on this Mac` : "Discovering installed applications…"}</p></div>
-              <label className="search"><span>⌕</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search applications" /></label>
+              <div>
+                <h2>Applications</h2>
+                <p>{appsLoading && !apps.length
+                  ? "Discovering installed applications…"
+                  : appsError && !apps.length
+                    ? "Application discovery needs another attempt."
+                    : `${apps.length} applications discovered on this Mac`}</p>
+              </div>
+              <div className="application-tools">
+                <button className="app-refresh" disabled={appsLoading} onClick={() => refreshApplications(true)}>{appsLoading ? "Scanning…" : "Refresh"}</button>
+                <label className="search"><span>⌕</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search applications" /></label>
+              </div>
             </div>
             <div className="column-head"><span>APPLICATION</span><span>POLICY</span></div>
             <div className="app-list">
               {filteredApps.map(app => <AppRow key={app.executablePath} app={app} blocked={isBlocked(app)} busy={busyApp === app.executablePath} onToggle={toggleApplication} />)}
+              {appsLoading && !apps.length && <div className="empty">Reading signed application identities from this Mac…</div>}
+              {appsError && !apps.length && <div className="empty app-discovery-error"><strong>Application discovery failed</strong><span>{appsError}</span><button onClick={() => refreshApplications(true)}>Try again</button></div>}
+              {!appsLoading && !appsError && !apps.length && <div className="empty app-discovery-error"><strong>No applications found</strong><span>Velox could not find application bundles in the standard macOS locations.</span><button onClick={() => refreshApplications(true)}>Scan again</button></div>}
               {!filteredApps.length && apps.length > 0 && <div className="empty">No applications match “{query}”.</div>}
             </div>
           </section>
@@ -960,6 +1322,58 @@ function App() {
 
           <section className="panel coverage-panel">
             <div><span className="coverage-state">ALL BROWSERS ENFORCED</span><h2>Kernel Endpoint Security + Pasteboard Guard</h2><p>Protects Safari, Google Chrome, Microsoft Edge, Mozilla Firefox, Brave, and Opera. File access is intercepted at the kernel level (AUTH_OPEN) and clipboard transfers are intercepted upon browser activation. No browser extensions or user permissions needed.</p></div>
+          </section>
+        </>}
+
+        {activeFeature === "email" && <>
+          <section className="summary-grid">
+            <article><span className="card-label">EMAIL POLICY</span><strong>{modeCopy[emailAttachmentMode]?.label}</strong><p>Applies to classified file reads by native mail clients.</p></article>
+            <article><span className="card-label">CLASSIFIED FILE CACHE</span><strong>{emailCachedClassificationCount}</strong><p>Fresh discovery results currently enforceable.</p></article>
+            <article><span className="card-label">RECENTLY BLOCKED</span><strong>{recentEmailBlocks}</strong><p>Native attachment candidates in the activity window.</p></article>
+          </section>
+
+          <section className="panel upload-panel">
+            <div className="upload-heading">
+              <div className="upload-icon">✉</div>
+              <div>
+                <div className="title-with-badge"><h2>Native email attachment protection</h2><span>CLASSIFICATION-AWARE</span></div>
+                <p>Blocks Apple Mail and Microsoft Outlook from reading files that Endpoint Data Discovery has already classified. File downloads, message reading, and unclassified attachments remain allowed.</p>
+              </div>
+            </div>
+            <div className="upload-controls">
+              <div className="protected-folders">
+                <span>TRUSTED CLIENT IDENTITIES</span>
+                <strong>Apple Mail · Microsoft Outlook · {emailClientCount} signed rules</strong>
+              </div>
+              <div className="segmented">
+                {Object.entries(modeCopy).map(([value, copy]) => (
+                  <button key={value} className={emailAttachmentMode === value ? "selected" : ""} disabled={busyEmailAttachment || !online} onClick={() => changeEmailAttachmentConfig(value)}>{copy.label}</button>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="panel coverage-panel">
+            <div>
+              <span className="coverage-state">PROTECTED CLASSIFICATIONS</span>
+              <h2>{emailProtectedClassifications.length ? "Selected sensitive-data classes" : "Every active OCR classification"}</h2>
+              <p>Choose which discovery classifications are protected. An empty selection means all current and future active OCR classifications.</p>
+              <div className="email-classification-list">
+                {ocrClassifications.map(classification => {
+                  const selected = !emailProtectedClassifications.length || emailProtectedClassifications.includes(classification);
+                  return <button key={classification} className={selected ? "selected" : ""} disabled={busyEmailAttachment || !online} onClick={() => toggleEmailClassification(classification)}>{selected ? "✓ " : ""}{classification}</button>;
+                })}
+              </div>
+            </div>
+          </section>
+
+          <section className="panel coverage-panel">
+            <div>
+              <span className="coverage-state warning">HONEST ENDPOINT BOUNDARY</span>
+              <h2>Pre-egress file-read denial, not message inspection</h2>
+              <p>macOS Endpoint Security does not expose a reliable Send event, recipients, subject, or attachment intent. Velox therefore denies a native mail client's read of a metadata-matched classified file before it can attach the bytes. Webmail uploads are controlled separately by Web Upload Control; recipient-aware policy belongs at the mail gateway.</p>
+              <div className="email-cache-note"><strong>Coverage prerequisite</strong><span>Run Endpoint Data Discovery after installing this build. Modified files fail open until they are scanned again, preventing stale classifications from blocking unrelated content.</span></div>
+            </div>
           </section>
         </>}
 
@@ -1016,6 +1430,61 @@ function App() {
 
           <section className="panel coverage-panel">
             <div><span className={`coverage-state ${usbEncryptionMode === "enforce" ? "warning" : ""}`}>{usbEncryptionMode === "enforce" ? "PLAINTEXT OUTER-VOLUME WRITES DENIED" : "KERNEL REMOVABLE-MEDIA CONTROL"}</span><h2>AUTH_MOUNT + AUTH_OPEN + AUTH_CREATE + AUTH_COPYFILE</h2><p>Device blocking and encrypted-container enforcement are mutually exclusive. Selecting container enforcement disables whole-device blocking, provisions VeloxSecure.sparsebundle, and permits only Apple's trusted disk-image processes to update that backing store. Recovery keys are root-only and local to this prototype; production must escrow wrapped device keys through the authenticated backend.</p></div>
+          </section>
+        </>}
+
+        {activeFeature === "optical-media" && <>
+          <section className="summary-grid">
+            <article><span className="card-label">MOUNT POLICY</span><strong>{modeCopy[opticalDiskImageMode]?.label}</strong><p>Evaluated before a covered volume becomes available.</p></article>
+            <article><span className="card-label">DISK IMAGES</span><strong className={opticalDiskImageBlocksDiskImages ? "state-enabled" : ""}>{opticalDiskImageBlocksDiskImages ? "Protected" : "Allowed"}</strong><p>DMG, ISO, sparse image and other virtual mounts.</p></article>
+            <article><span className="card-label">OPTICAL MEDIA</span><strong className={opticalDiskImageBlocksOpticalMedia ? "state-enabled" : ""}>{opticalDiskImageBlocksOpticalMedia ? "Protected" : "Allowed"}</strong><p>Mounted CD, DVD and UDF-family filesystems.</p></article>
+            <article><span className="card-label">RECENTLY BLOCKED</span><strong>{recentOpticalBlocks}</strong><p>Covered mount attempts in the activity window.</p></article>
+          </section>
+
+          <section className="panel mode-panel">
+            <div><h2>Enforcement mode</h2><p>Enforce denies covered mounts. Audit only records the same decisions while allowing the volume.</p></div>
+            <div className="segmented">
+              {Object.entries(modeCopy).map(([value, copy]) => (
+                <button
+                  key={value}
+                  className={opticalDiskImageMode === value ? "selected" : ""}
+                  disabled={busyOpticalDiskImage || !online || (value !== "disabled" && !opticalDiskImageBlocksDiskImages && !opticalDiskImageBlocksOpticalMedia)}
+                  onClick={() => changeOpticalDiskImageConfig({ mode: value })}
+                >{copy.label}</button>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel applications-panel">
+            <div className="panel-heading"><div><h2>Controlled mount types</h2><p>Choose either route or protect both. At least one route remains selected while the policy is active.</p></div></div>
+            <div className="discovery-scope-grid">
+              <button
+                className={`discovery-scope-card ${opticalDiskImageBlocksDiskImages ? "selected" : ""}`}
+                disabled={busyOpticalDiskImage || !online || (opticalDiskImageMode !== "disabled" && opticalDiskImageBlocksDiskImages && !opticalDiskImageBlocksOpticalMedia)}
+                onClick={() => changeOpticalDiskImageConfig({ blockDiskImages: !opticalDiskImageBlocksDiskImages })}
+              >
+                <span>{opticalDiskImageBlocksDiskImages ? "✓" : "○"}</span>
+                <strong>Disk images</strong>
+                <p>Virtual, file-backed mount candidates including DMG, ISO, sparseimage and sparsebundle containers.</p>
+              </button>
+              <button
+                className={`discovery-scope-card ${opticalDiskImageBlocksOpticalMedia ? "selected" : ""}`}
+                disabled={busyOpticalDiskImage || !online || (opticalDiskImageMode !== "disabled" && opticalDiskImageBlocksOpticalMedia && !opticalDiskImageBlocksDiskImages)}
+                onClick={() => changeOpticalDiskImageConfig({ blockOpticalMedia: !opticalDiskImageBlocksOpticalMedia })}
+              >
+                <span>{opticalDiskImageBlocksOpticalMedia ? "✓" : "○"}</span>
+                <strong>CD & DVD media</strong>
+                <p>Physical optical volumes identified by CD9660, CDDA and UDF-family filesystem metadata.</p>
+              </button>
+            </div>
+          </section>
+
+          <section className="panel coverage-panel">
+            <div>
+              <span className={`coverage-state ${opticalDiskImageMode === "enforce" ? "warning" : ""}`}>{opticalDiskImageMode === "enforce" ? "PRE-MOUNT DENIAL ACTIVE" : opticalDiskImageMode === "audit-only" ? "MOUNT ACTIVITY AUDITED" : "CONTROL DISABLED"}</span>
+              <h2>Endpoint Security AUTH_MOUNT enforcement</h2>
+              <p>Velox identifies virtual mounts through Apple’s mount disposition and physical optical media through filesystem metadata, then decides before the mount completes. Internal disks, network shares and nullfs mounts are not classified as optical media. A narrow, time-limited allowance lets only Apple’s authenticated disk-image stack mount Velox Secure USB containers, so this control cannot break USB encryption.</p>
+            </div>
           </section>
         </>}
 
@@ -1096,10 +1565,32 @@ function App() {
         </>}
 
         {activeFeature === "printer" && <>
-          <section className="summary-grid">
+          <section className="summary-grid printer-summary-grid">
             <article><span className="card-label">PRINTER POLICY</span><strong>{modeCopy[printerMode]?.label}</strong><p>Applies to physical CUPS printer queues.</p></article>
+            <article><span className="card-label">PRINT-TO-PDF POLICY</span><strong>{modeCopy[printToPDFMode]?.label}</strong><p>Controls new PDF files created by applications.</p></article>
             <article><span className="card-label">CONFIGURED QUEUES</span><strong>{printerQueueCount}</strong><p>{printerControlledQueueCount} currently controlled by Velox.</p></article>
-            <article><span className="card-label">RECENTLY BLOCKED</span><strong>{recentPrinterBlocks}</strong><p>Queue enforcement events in the activity window.</p></article>
+            <article><span className="card-label">RECENTLY BLOCKED</span><strong>{recentPrinterBlocks + recentPrintToPDFBlocks}</strong><p>{recentPrinterBlocks} print · {recentPrintToPDFBlocks} PDF output.</p></article>
+          </section>
+
+          <section className="panel upload-panel">
+            <div className="upload-heading">
+              <div className="upload-icon">PDF</div>
+              <div>
+                <div className="title-with-badge"><h2>Print-to-PDF / File Control</h2><span>ENDPOINT SECURITY</span></div>
+                <p>Enforce denies new PDF files created by applications in Desktop, Documents, Downloads, Movies, Music, Pictures, and Public. Audit only records the same attempts without interrupting them.</p>
+              </div>
+            </div>
+            <div className="upload-controls">
+              <div className="protected-folders">
+                <span>DOWNLOAD SAFETY</span>
+                <strong>Partial-download staging and final rename remain allowed</strong>
+              </div>
+              <div className="segmented">
+                {Object.entries(modeCopy).map(([value, copy]) => (
+                  <button key={value} className={printToPDFMode === value ? "selected" : ""} disabled={busyPrintToPDF || !online} onClick={() => changePrintToPDFMode(value)}>{copy.label}</button>
+                ))}
+              </div>
+            </div>
           </section>
 
           <section className="panel upload-panel">
@@ -1132,8 +1623,179 @@ function App() {
               <p>Velox saves each queue's original enabled and accepting state before changing it, then restores only queues changed by Velox when enforcement is disabled. Printer and job metadata are logged without document names or content.</p>
               <div style={{ marginTop: "12px", padding: "10px 14px", borderRadius: "8px", background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.1)", fontSize: "12px", color: "#a0aab8" }}>
                 <strong style={{ color: "#e2e8f0", display: "block", marginBottom: "4px" }}>Prototype boundary</strong>
-                This phase blocks physical CUPS queues globally. Content classification and watermarking require a signed CUPS filter and OS-by-OS validation. Save as PDF does not use a physical printer queue and belongs to the separate Print-to-PDF control feature.
+                Physical output uses CUPS queue control. Print-to-PDF uses Endpoint Security file authorization because macOS has no public print-dialog authorization event. It blocks direct new PDF output from desktop apps and browsers, including Save as PDF and equivalent app export paths; macOS does not reveal which UI command initiated the creation. Existing-file overwrites and atomic rename workflows require separate acceptance coverage.
               </div>
+            </div>
+          </section>
+        </>}
+
+        {activeFeature === "ocr" && <>
+          <section className="summary-grid">
+            <article><span className="card-label">DOCUMENT OCR</span><strong>{modeCopy[ocrMode]?.label}</strong><p>Images and scanned PDFs classified locally.</p></article>
+            <article><span className="card-label">SCREENSHOT OCR</span><strong>{modeCopy[screenshotOCRMode]?.label}</strong><p>Detect-and-remediate after capture.</p></article>
+            <article><span className="card-label">CLASSIFICATION RULES</span><strong>{ocrRuleCount}</strong><p>Payment card, PAN, Aadhaar and confidential markers.</p></article>
+            <article><span className="card-label">LANGUAGES</span><strong>{ocrRecognitionLanguages.length || 1}</strong><p>{ocrRecognitionLanguages.join(", ") || "en-US"}</p></article>
+          </section>
+
+          <section className="panel mode-panel">
+            <div><h2>Image and scanned-PDF policy</h2><p>Run on-device OCR and apply the configured content-classification rules.</p></div>
+            <div className="segmented">
+              {Object.entries(modeCopy).map(([value, copy]) => (
+                <button key={value} className={ocrMode === value ? "selected" : ""} disabled={busyOCR || !online} onClick={() => changeOCRMode(value)}>{copy.label}</button>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel mode-panel">
+            <div><h2>Screenshot detection and remediation</h2><p>After Apple’s signed screenshot tool creates an image, classify it and {screenshotOCRRemediation === "delete" ? "delete" : "quarantine"} sensitive captures.</p></div>
+            <div className="segmented">
+              {Object.entries(modeCopy).map(([value, copy]) => (
+                <button key={value} className={screenshotOCRMode === value ? "selected" : ""} disabled={busyScreenshotOCR || !online} onClick={() => changeScreenshotOCRMode(value)}>{copy.label}</button>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel ocr-test-panel">
+            <div className="ocr-test-heading">
+              <div>
+                <span className="coverage-state">LOCAL TEST</span>
+                <h2>Test an image or scanned PDF</h2>
+                <p>The native picker passes the file directly to Apple Vision and PDFKit. Recognized text stays in memory and is never shown in the console or written to logs.</p>
+              </div>
+              <button className="btn-add-rule ocr-scan-button" disabled={busyOCR || !online} onClick={scanOCRFile}>{busyOCR ? "Scanning…" : "Choose file to scan"}</button>
+            </div>
+
+            {ocrReport && (
+              <div className={`ocr-result ${ocrReport.decision}`}>
+                <div className="ocr-result-title">
+                  <div><span>LAST RESULT</span><strong>{ocrReport.fileName}</strong></div>
+                  <span className={`decision-badge ${ocrReport.decision}`}>{ocrReport.decision}</span>
+                </div>
+                <div className="ocr-result-metrics">
+                  <div><span>Characters recognized</span><strong>{ocrReport.recognizedCharacterCount.toLocaleString()}</strong></div>
+                  <div><span>Pages / frames</span><strong>{ocrReport.pageCount}</strong></div>
+                  <div><span>Average confidence</span><strong>{Math.round(ocrReport.averageConfidence * 100)}%</strong></div>
+                  <div><span>Processing</span><strong>{ocrReport.durationMillis} ms</strong></div>
+                </div>
+                <div className="ocr-classifications">
+                  <span>CLASSIFICATIONS</span>
+                  {ocrReport.matches.length
+                    ? ocrReport.matches.map(match => <strong key={match.ruleId}>{match.classification}<small>{match.matchCount} match{match.matchCount === 1 ? "" : "es"}</small></strong>)
+                    : <p>No configured sensitive-data rule matched this document.</p>}
+                </div>
+                <p className="ocr-privacy-note">Hash {ocrReport.contentHashPrefix} · {ocrReport.usedOCR ? "Apple Vision OCR" : "embedded PDF text"} · {ocrReport.cacheHit ? "memory cache hit" : "fresh analysis"}</p>
+              </div>
+            )}
+          </section>
+
+          <section className="panel coverage-panel">
+            <div>
+              <span className={`coverage-state ${screenshotOCRMode === "enforce" ? "warning" : ""}`}>{screenshotOCRMode === "enforce" ? "POST-CAPTURE REMEDIATION ACTIVE" : "ON-DEVICE CONTENT ANALYSIS"}</span>
+              <h2>Accurate macOS boundary</h2>
+              <p>OCR is intentionally asynchronous and never runs inside an Endpoint Security authorization deadline. Screenshot handling begins only after macOS creates the file, so this feature can quarantine sensitive captures but cannot prevent the pixels from existing briefly.</p>
+            </div>
+          </section>
+        </>}
+
+        {activeFeature === "discovery" && <>
+          <section className="summary-grid">
+            <article><span className="card-label">DISCOVERY POLICY</span><strong>{endpointDiscoveryRunning ? "Scanning…" : modeCopy[endpointDiscoveryMode]?.label}</strong><p>Scheduled at-rest classification.</p></article>
+            <article><span className="card-label">LAST SCAN</span><strong>{endpointDiscoveryLastReport ? endpointDiscoveryLastReport.filesInspected.toLocaleString() : "—"}</strong><p>{endpointDiscoveryLastReport ? "supported files inspected" : "No completed scan yet"}</p></article>
+            <article><span className="card-label">FINDINGS</span><strong>{endpointDiscoveryLastReport?.findingsCount ?? 0}</strong><p>Sensitive files in the latest report.</p></article>
+            <article><span className="card-label">CLASSIFICATION TAGS</span><strong>{endpointDiscoveryLastReport?.taggedCount ?? 0}</strong><p>Velox xattrs applied in Enforce mode.</p></article>
+          </section>
+
+          <section className="panel mode-panel">
+            <div><h2>Discovery mode</h2><p>Audit reports matches without changing files. Enforce also applies a Velox classification tag when supported by the filesystem.</p></div>
+            <div className="segmented">
+              {Object.entries(modeCopy).map(([value, copy]) => (
+                <button key={value} className={endpointDiscoveryMode === value ? "selected" : ""} disabled={busyDiscovery || !online || endpointDiscoveryRunning} onClick={() => changeEndpointDiscoveryConfig({ mode: value })}>{copy.label}</button>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel discovery-config-panel">
+            <div className="panel-heading discovery-heading">
+              <div><h2>Schedule and coverage</h2><p>Choose which user-visible storage locations are scanned using the active OCR/content rules.</p></div>
+              <label className="discovery-schedule">
+                <span>SCAN INTERVAL</span>
+                <select className="form-select" value={endpointDiscoveryScheduleIntervalMinutes} disabled={busyDiscovery || endpointDiscoveryRunning} onChange={event => changeEndpointDiscoveryConfig({ scheduleIntervalMinutes: Number(event.target.value) })}>
+                  <option value={15}>Every 15 minutes</option>
+                  <option value={60}>Every hour</option>
+                  <option value={360}>Every 6 hours</option>
+                  <option value={1440}>Every day</option>
+                  <option value={10080}>Every week</option>
+                </select>
+              </label>
+            </div>
+            <div className="discovery-scope-grid">
+              {[
+                ["includeLocalHome", endpointDiscoveryIncludesLocalHome, "Local user data", "Home folders and user-created content on this Mac"],
+                ["includeMountedVolumes", endpointDiscoveryIncludesMountedVolumes, "Mounted local volumes", "External and removable filesystems currently mounted"],
+                ["includeMountedShares", endpointDiscoveryIncludesMountedShares, "Mounted network shares", "Browsable SMB, AFP, and other non-local shares"],
+              ].map(([key, enabled, title, detail]) => (
+                <button key={key} className={`discovery-scope-card ${enabled ? "selected" : ""}`} aria-pressed={enabled} disabled={busyDiscovery || endpointDiscoveryRunning} onClick={() => changeEndpointDiscoveryConfig({ [key]: !enabled })}>
+                  <span className="scope-check">{enabled ? "✓" : ""}</span>
+                  <strong>{title}</strong>
+                  <small>{detail}</small>
+                </button>
+              ))}
+            </div>
+            <button className={`discovery-tag-option ${endpointDiscoveryTagsClassifiedFiles ? "selected" : ""}`} aria-pressed={endpointDiscoveryTagsClassifiedFiles} disabled={busyDiscovery || endpointDiscoveryRunning} onClick={() => changeEndpointDiscoveryConfig({ tagClassifiedFiles: !endpointDiscoveryTagsClassifiedFiles })}>
+              <span className="scope-check">{endpointDiscoveryTagsClassifiedFiles ? "✓" : ""}</span>
+              <span><strong>Tag classified files</strong><small>Write <code>com.velox.macdlp.classification</code> metadata only in Enforce mode. Unsupported or read-only filesystems remain report-only.</small></span>
+            </button>
+          </section>
+
+          <section className="panel discovery-run-panel">
+            <div>
+              <span className={`coverage-state ${endpointDiscoveryRunning ? "warning" : ""}`}>{endpointDiscoveryRunning ? "SCAN IN PROGRESS" : "ON-DEMAND SCAN"}</span>
+              <h2>{endpointDiscoveryRunning ? "Velox is inspecting endpoint data" : "Run discovery now"}</h2>
+              <p>Classification happens locally. Reports contain file paths, hashes, rule identifiers, and classifications—but never extracted text or file content.</p>
+              {endpointDiscoveryNextScheduledAt && <small>Next scheduled scan: {new Date(endpointDiscoveryNextScheduledAt).toLocaleString()}</small>}
+            </div>
+            <div className="discovery-run-actions">
+              <button className="setup-button" onClick={openFullDiskAccessSettings}>Full Disk Access</button>
+              <button className="btn-add-rule" disabled={busyDiscovery || endpointDiscoveryRunning || endpointDiscoveryMode === "disabled" || !online} onClick={startEndpointDiscoveryScan}>{endpointDiscoveryRunning ? "Scanning…" : "Scan now"}</button>
+            </div>
+          </section>
+
+          {endpointDiscoveryLastReport && (
+            <section className="panel discovery-report-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Latest discovery report</h2>
+                  <p>{new Date(endpointDiscoveryLastReport.completedAt).toLocaleString()} · {endpointDiscoveryLastReport.durationMillis.toLocaleString()} ms · {endpointDiscoveryLastReport.rootsScanned} root{endpointDiscoveryLastReport.rootsScanned === 1 ? "" : "s"}</p>
+                </div>
+                <span className={`coverage-state ${endpointDiscoveryLastReport.inaccessibleItems ? "warning" : ""}`}>{endpointDiscoveryLastReport.inaccessibleItems ? `${endpointDiscoveryLastReport.inaccessibleItems} INACCESSIBLE` : "SCAN COMPLETE"}</span>
+              </div>
+              <div className="discovery-report-metrics">
+                <div><span>Enumerated</span><strong>{endpointDiscoveryLastReport.filesEnumerated.toLocaleString()}</strong></div>
+                <div><span>Inspected</span><strong>{endpointDiscoveryLastReport.filesInspected.toLocaleString()}</strong></div>
+                <div><span>Skipped</span><strong>{endpointDiscoveryLastReport.filesSkipped.toLocaleString()}</strong></div>
+                <div><span>Findings</span><strong>{endpointDiscoveryLastReport.findingsCount.toLocaleString()}</strong></div>
+                <div><span>Tagged</span><strong>{endpointDiscoveryLastReport.taggedCount.toLocaleString()}</strong></div>
+              </div>
+              <div className="discovery-findings">
+                {endpointDiscoveryLastReport.findings.map(finding => (
+                  <div className="discovery-finding-row" key={`${finding.contentHashPrefix}-${finding.filePath}`}>
+                    <span className={`decision-dot ${finding.tagStatus === "tagged" ? "allowed" : "would-block"}`} />
+                    <div><strong>{finding.fileName}</strong><span title={finding.filePath}>{finding.filePath}</span></div>
+                    <span>{finding.classifications.join(", ")}</span>
+                    <b className={`discovery-tag ${finding.tagStatus}`}>{finding.tagStatus}</b>
+                  </div>
+                ))}
+                {!endpointDiscoveryLastReport.findings.length && <div className="empty">No sensitive content matched the active classification rules.</div>}
+                {endpointDiscoveryLastReport.findingsTruncated && <div className="discovery-truncated">Showing the first 100 findings. The complete JSON report is stored at {endpointDiscoveryLastReport.reportPath}.</div>}
+              </div>
+            </section>
+          )}
+
+          <section className="panel coverage-panel">
+            <div>
+              <span className="coverage-state">FULL DISK ACCESS REQUIRED FOR COMPLETE COVERAGE</span>
+              <h2>macOS discovery boundary</h2>
+              <p>The scanner can only inspect files readable by the Velox host process. Grant Full Disk Access for protected user folders. Mounted shares must be connected and authenticated at scan time; read-only shares can be classified and reported but cannot be tagged.</p>
             </div>
           </section>
         </>}
@@ -1340,10 +2002,10 @@ function App() {
         </>}
 
         {activeFeature !== "overview" && <section className="panel activity-panel">
-          <div className="panel-heading"><div><h2>Live activity</h2><p>{activeFeature === "usb-storage" ? "Latest USB mount, container, and plaintext-write decisions" : activeFeature === "web-upload" ? "Latest browser file-transfer decisions from Endpoint Security" : activeFeature === "nearby-transfer" ? "Latest AirDrop and Bluetooth protected-file decisions" : activeFeature === "clipboard" ? "Latest clipboard copy decisions from the Velox user-session monitor" : activeFeature === "printer" ? "Latest physical printer queue and job decisions from CUPS" : activeFeature === "network-flow" ? "Latest outbound socket and network flow decisions from NetworkExtension" : "Latest application execution decisions from Endpoint Security"}</p></div><button className="refresh" onClick={refreshEvents}>Refresh</button></div>
+          <div className="panel-heading"><div><h2>Live activity</h2><p>{activeFeature === "usb-storage" ? "Latest USB mount, container, and plaintext-write decisions" : activeFeature === "optical-media" ? "Latest virtual disk-image and physical optical-media mount decisions" : activeFeature === "web-upload" ? "Latest browser file-transfer decisions from Endpoint Security" : activeFeature === "email" ? "Latest classified-file decisions for native mail clients" : activeFeature === "nearby-transfer" ? "Latest AirDrop and Bluetooth protected-file decisions" : activeFeature === "clipboard" ? "Latest clipboard copy decisions from the Velox user-session monitor" : activeFeature === "printer" ? "Latest physical print and PDF file-output decisions" : activeFeature === "ocr" ? "Latest on-device OCR classification decisions" : activeFeature === "discovery" ? "Latest scheduled and on-demand at-rest discovery findings" : activeFeature === "network-flow" ? "Latest outbound socket and network flow decisions from NetworkExtension" : "Latest application execution decisions from Endpoint Security"}</p></div><button className="refresh" onClick={refreshEvents}>Refresh</button></div>
           <div className="event-list">
             {visibleEvents.slice().reverse().slice(0, 12).map(event => <EventRow key={event.eventId} event={event} />)}
-            {!visibleEvents.length && <div className="empty">No {activeFeature === "usb-storage" ? "USB storage" : activeFeature === "web-upload" ? "browser upload" : activeFeature === "nearby-transfer" ? "nearby transfer" : activeFeature === "clipboard" ? "clipboard" : activeFeature === "printer" ? "printer" : activeFeature === "network-flow" ? "network flow" : "application execution"} events recorded yet.</div>}
+            {!visibleEvents.length && <div className="empty">No {activeFeature === "usb-storage" ? "USB storage" : activeFeature === "optical-media" ? "optical or disk-image mount" : activeFeature === "web-upload" ? "browser upload" : activeFeature === "email" ? "email attachment" : activeFeature === "nearby-transfer" ? "nearby transfer" : activeFeature === "clipboard" ? "clipboard" : activeFeature === "printer" ? "printer" : activeFeature === "ocr" ? "OCR classification" : activeFeature === "discovery" ? "endpoint discovery" : activeFeature === "network-flow" ? "network flow" : "application execution"} events recorded yet.</div>}
           </div>
         </section>}
         </div>

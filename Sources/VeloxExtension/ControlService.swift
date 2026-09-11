@@ -13,6 +13,11 @@ private struct ControlSnapshot: Codable {
     let blockedExecutablePaths: [String]
     let webUploadMode: String
     let webUploadProtectedDirectories: [String]
+    let emailAttachmentMode: String
+    let emailClientCount: Int
+    let emailClientSigningIds: [String]
+    let emailProtectedClassifications: [String]
+    let emailCachedClassificationCount: Int
     let usbStorageMode: String
     let usbEncryptionMode: String
     let usbContainerSizePercent: Int
@@ -31,7 +36,26 @@ private struct ControlSnapshot: Codable {
     let printerQueueCount: Int
     let printerControlledQueueCount: Int
     let printerLastError: String?
+    let ocrMode: String
+    let screenshotOCRMode: String
+    let screenshotOCRRemediation: String
+    let ocrRuleCount: Int
+    let ocrRecognitionLanguages: [String]
+    let ocrClassifications: [String]
+    let endpointDiscoveryMode: String
+    let endpointDiscoveryScheduleIntervalMinutes: Int
+    let endpointDiscoveryIncludesLocalHome: Bool
+    let endpointDiscoveryIncludesMountedVolumes: Bool
+    let endpointDiscoveryIncludesMountedShares: Bool
+    let endpointDiscoveryTagsClassifiedFiles: Bool
+    let endpointDiscoveryMaxFilesPerScan: Int
     let networkFlowMode: String
+    let cloudSyncMode: String
+    let opticalDiskImageMode: String
+    let opticalDiskImageBlocksDiskImages: Bool
+    let opticalDiskImageBlocksOpticalMedia: Bool
+    let screenWatermarkingMode: String
+    let printToPDFMode: String
     let networkFlowDefaultAction: String
     let networkFlowRuleCount: Int
     let networkFlowRules: [NetworkDestinationRule]
@@ -69,6 +93,45 @@ private struct ClipboardEventAttempt: Decodable {
     let contentTypes: [String]
     let itemCount: Int
     let cleared: Bool
+}
+
+private struct OCRScanEventAttempt: Decodable {
+    let source: String
+    let fileType: String
+    let contentHashPrefix: String
+    let decision: String
+    let ruleIds: [String]
+    let classifications: [String]
+    let recognizedCharacterCount: Int
+    let pageCount: Int
+    let averageConfidence: Double
+    let usedOCR: Bool
+    let cacheHit: Bool
+    let durationMillis: Int
+    let remediation: String
+}
+
+private struct EndpointDiscoveryEventAttempt: Decodable {
+    let kind: String
+    let scanId: String
+    let trigger: String
+    let filePath: String?
+    let fileType: String?
+    let contentHashPrefix: String?
+    let locationKind: String?
+    let ruleIds: [String]
+    let classifications: [String]
+    let tagStatus: String?
+    let durationMillis: Int
+    let filesEnumerated: Int?
+    let filesInspected: Int?
+    let findingsCount: Int?
+    let taggedCount: Int?
+    let inaccessibleItems: Int?
+    let status: String?
+    let fileSize: Int64?
+    let modifiedAtSeconds: Int64?
+    let modifiedAtNanoseconds: Int64?
 }
 
 /// Resolves each valid, Team-ID-bound Velox caller to its least-privilege role.
@@ -186,6 +249,7 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
     private let eventLogger: EventLogger
     private let usbEncryptionCoordinator: USBEncryptionCoordinator
     private let printerCoordinator: PrinterControlCoordinator
+    private let classificationCache: FileClassificationCache
     private let mutationLock = NSLock()
     private let clientsLock = NSLock()
     private var connectedClients: [NSXPCConnection] = []
@@ -197,7 +261,8 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
         logPath: String = EventLogger.defaultLogPath,
         eventLogger: EventLogger? = nil,
         usbEncryptionCoordinator: USBEncryptionCoordinator,
-        printerCoordinator: PrinterControlCoordinator
+        printerCoordinator: PrinterControlCoordinator,
+        classificationCache: FileClassificationCache = FileClassificationCache()
     ) {
         self.policyManager = policyManager
         self.healthPath = healthPath
@@ -205,6 +270,7 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
         self.eventLogger = eventLogger ?? EventLogger(logFilePath: logPath)
         self.usbEncryptionCoordinator = usbEncryptionCoordinator
         self.printerCoordinator = printerCoordinator
+        self.classificationCache = classificationCache
     }
 
     func addClient(_ connection: NSXPCConnection) {
@@ -230,6 +296,10 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
         let detail: String
         if event.module == "clipboard-control" {
             detail = event.pageURL ?? event.signingId ?? "Application"
+        } else if event.module == "ocr-content-classification" {
+            detail = event.classifications?.joined(separator: ", ") ?? ""
+        } else if event.module == "email-attachment-control" {
+            detail = "\(event.interaction ?? event.signingId ?? "Mail client")|\(event.classifications?.joined(separator: ", ") ?? "Classified content")"
         } else if event.module == "network-flow-control" {
             detail = event.executablePath
         } else {
@@ -246,6 +316,18 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                     detail: detail,
                     timestamp: timestamp
                 )
+            }
+        }
+    }
+
+    func broadcastPotentialScreenshot(path: String) {
+        clientsLock.lock()
+        let clients = connectedClients
+        clientsLock.unlock()
+        let timestamp = Date().timeIntervalSince1970
+        for client in clients {
+            if let proxy = client.remoteObjectProxyWithErrorHandler({ _ in }) as? VeloxClientProtocol {
+                proxy.handlePotentialScreenshot(path: path, timestamp: timestamp)
             }
         }
     }
@@ -272,11 +354,18 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                 allowedApplications: current.applicationControl.allowedApplications
             ),
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: current.clipboardControl,
             printerControl: current.printerControl,
-            networkFlowControl: current.networkFlowControl
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -298,11 +387,64 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                 mode: requestedMode,
                 protectedDirectoryNames: current.webUploadControl.protectedDirectoryNames
             ),
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: current.clipboardControl,
             printerControl: current.printerControl,
-            networkFlowControl: current.networkFlowControl
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setEmailAttachmentConfig(_ configJSON: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        let validKeys: Set<String> = ["mode", "mailClients", "protectedClassifications"]
+        let validRuleKeys: Set<String> = [
+            "ruleId", "signingId", "teamId", "isPlatformBinary",
+            "cdhash", "executablePath", "executablePathPrefix"
+        ]
+        guard let data = configJSON.data(using: .utf8), data.count <= 65_536,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object.keys.allSatisfy(validKeys.contains),
+              let clients = object["mailClients"] as? [[String: Any]],
+              clients.allSatisfy({ $0.keys.allSatisfy(validRuleKeys.contains) }),
+              let requested = try? JSONDecoder().decode(EmailAttachmentControlConfig.self, from: data) else {
+            reply(errorJSON("Invalid Email Attachment Control configuration."))
+            return
+        }
+        do {
+            try requested.validate()
+        } catch {
+            reply(errorJSON("Email Attachment Control configuration was rejected: \(error)"))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            emailAttachmentControl: requested,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -321,6 +463,7 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             policyVersion: current.policyVersion + 1,
             applicationControl: current.applicationControl,
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: USBStorageControlConfig(
                 mode: requestedMode,
                 blockExternalStorage: current.usbStorageControl.blockExternalStorage,
@@ -332,7 +475,13 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: current.clipboardControl,
             printerControl: current.printerControl,
-            networkFlowControl: current.networkFlowControl
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -351,6 +500,7 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             policyVersion: current.policyVersion + 1,
             applicationControl: current.applicationControl,
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: USBStorageControlConfig(
                 mode: requestedMode == .disabled ? current.usbStorageControl.mode : .disabled,
                 blockExternalStorage: current.usbStorageControl.blockExternalStorage,
@@ -360,7 +510,13 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: current.clipboardControl,
             printerControl: current.printerControl,
-            networkFlowControl: current.networkFlowControl
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -379,6 +535,7 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             policyVersion: current.policyVersion + 1,
             applicationControl: current.applicationControl,
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: NearbyTransferControlConfig(
                 mode: requestedMode,
@@ -388,7 +545,13 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             ),
             clipboardControl: current.clipboardControl,
             printerControl: current.printerControl,
-            networkFlowControl: current.networkFlowControl
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -407,6 +570,7 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             policyVersion: current.policyVersion + 1,
             applicationControl: current.applicationControl,
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: ClipboardControlConfig(
@@ -414,7 +578,13 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                 blockedApplications: current.clipboardControl.blockedApplications
             ),
             printerControl: current.printerControl,
-            networkFlowControl: current.networkFlowControl
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -433,6 +603,7 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             policyVersion: current.policyVersion + 1,
             applicationControl: current.applicationControl,
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: current.clipboardControl,
@@ -440,7 +611,288 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                 mode: requestedMode,
                 blockAllPrinters: current.printerControl.blockAllPrinters
             ),
-            networkFlowControl: current.networkFlowControl
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setOCRMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutateOCRConfig(mode: mode, updatesScreenshotMode: false, reply: reply)
+    }
+
+    func setScreenshotOCRMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutateOCRConfig(mode: mode, updatesScreenshotMode: true, reply: reply)
+    }
+
+    func setEndpointDiscoveryConfig(_ configJSON: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        let validKeys: Set<String> = [
+            "mode", "scheduleIntervalMinutes", "includeLocalHome",
+            "includeMountedVolumes", "includeMountedShares",
+            "tagClassifiedFiles", "maxFilesPerScan"
+        ]
+        guard let data = configJSON.data(using: .utf8), data.count <= 32_768,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object.keys.allSatisfy(validKeys.contains),
+              let requested = try? JSONDecoder().decode(
+                EndpointDiscoveryControlConfig.self,
+                from: data
+              ) else {
+            reply(errorJSON("Invalid Endpoint Data Discovery configuration."))
+            return
+        }
+        do {
+            try requested.validate()
+        } catch {
+            reply(errorJSON("Endpoint Data Discovery configuration was rejected: \(error)"))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: requested,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    private func mutateOCRConfig(
+        mode: String,
+        updatesScreenshotMode: Bool,
+        reply: @escaping (String) -> Void
+    ) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedMode = PolicyMode(rawValue: mode) else {
+            reply(errorJSON("Unsupported OCR mode '\(mode)'."))
+            return
+        }
+        let current = policyManager.policyEngine.currentPolicy()
+        let ocr = current.ocrControl
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            ocrControl: OCRControlConfig(
+                mode: updatesScreenshotMode ? ocr.mode : requestedMode,
+                screenshotMode: updatesScreenshotMode ? requestedMode : ocr.screenshotMode,
+                screenshotRemediation: ocr.screenshotRemediation,
+                recognitionLanguages: ocr.recognitionLanguages,
+                minimumConfidence: ocr.minimumConfidence,
+                maxFileSizeMB: ocr.maxFileSizeMB,
+                maxPDFPages: ocr.maxPDFPages,
+                rules: ocr.rules
+            ),
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
+        )
+        apply(updated, reply: reply)
+    }
+
+
+    func setCloudSyncMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedMode = PolicyMode(rawValue: mode) else {
+            reply(errorJSON("Unsupported cloud-sync mode '\(mode)'."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: CloudSyncControlConfig(
+                mode: requestedMode,
+                blockCloudSync: current.cloudSyncControl.blockCloudSync,
+                monitoredProviders: current.cloudSyncControl.monitoredProviders
+            ),
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setOpticalDiskImageMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedMode = PolicyMode(rawValue: mode) else {
+            reply(errorJSON("Unsupported optical-disk-image mode '\(mode)'."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: OpticalDiskImageControlConfig(
+                mode: requestedMode,
+                blockDiskImages: current.opticalDiskImageControl.blockDiskImages,
+                blockOpticalMedia: current.opticalDiskImageControl.blockOpticalMedia
+            ),
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setOpticalDiskImageConfig(
+        _ configJSON: String,
+        withReply reply: @escaping (String) -> Void
+    ) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        let validKeys: Set<String> = ["mode", "blockDiskImages", "blockOpticalMedia"]
+        guard let data = configJSON.data(using: .utf8), data.count <= 16_384,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object.keys.allSatisfy(validKeys.contains),
+              let requested = try? JSONDecoder().decode(
+                  OpticalDiskImageControlConfig.self,
+                  from: data
+              ),
+              (try? requested.validate()) != nil else {
+            reply(errorJSON("Invalid Optical & Disk Image Control configuration."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: requested,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setScreenWatermarkingMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedMode = PolicyMode(rawValue: mode) else {
+            reply(errorJSON("Unsupported screen-watermarking mode '\(mode)'."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: ScreenWatermarkingConfig(
+                mode: requestedMode,
+                text: current.screenWatermarking.text,
+                opacity: current.screenWatermarking.opacity
+            ),
+            printToPDFControl: current.printToPDFControl
+        )
+        apply(updated, reply: reply)
+    }
+
+    func setPrintToPDFMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+
+        guard let requestedMode = PolicyMode(rawValue: mode) else {
+            reply(errorJSON("Unsupported print-to-pdf mode '\(mode)'."))
+            return
+        }
+
+        let current = policyManager.policyEngine.currentPolicy()
+        let updated = VeloxPolicy(
+            policyVersion: current.policyVersion + 1,
+            applicationControl: current.applicationControl,
+            webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
+            usbStorageControl: current.usbStorageControl,
+            nearbyTransferControl: current.nearbyTransferControl,
+            clipboardControl: current.clipboardControl,
+            printerControl: current.printerControl,
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: PrintToPDFControlConfig(
+                mode: requestedMode,
+                blockSaveAsPDF: current.printToPDFControl.blockSaveAsPDF
+            )
         )
         apply(updated, reply: reply)
     }
@@ -459,15 +911,22 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             policyVersion: current.policyVersion + 1,
             applicationControl: current.applicationControl,
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: current.clipboardControl,
             printerControl: current.printerControl,
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
             networkFlowControl: NetworkFlowControlConfig(
                 mode: requestedMode,
                 defaultAction: current.networkFlowControl.defaultAction,
                 rules: current.networkFlowControl.rules
-            )
+            ),
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -486,15 +945,22 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             policyVersion: current.policyVersion + 1,
             applicationControl: current.applicationControl,
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: current.clipboardControl,
             printerControl: current.printerControl,
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
             networkFlowControl: NetworkFlowControlConfig(
                 mode: current.networkFlowControl.mode,
                 defaultAction: requestedAction,
                 rules: current.networkFlowControl.rules
-            )
+            ),
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -531,15 +997,22 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             policyVersion: current.policyVersion + 1,
             applicationControl: current.applicationControl,
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: current.clipboardControl,
             printerControl: current.printerControl,
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
             networkFlowControl: NetworkFlowControlConfig(
                 mode: current.networkFlowControl.mode,
                 defaultAction: current.networkFlowControl.defaultAction,
                 rules: rules
-            )
+            ),
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -561,15 +1034,22 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             policyVersion: current.policyVersion + 1,
             applicationControl: current.applicationControl,
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: current.clipboardControl,
             printerControl: current.printerControl,
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
             networkFlowControl: NetworkFlowControlConfig(
                 mode: current.networkFlowControl.mode,
                 defaultAction: current.networkFlowControl.defaultAction,
                 rules: rules
-            )
+            ),
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -618,6 +1098,7 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             policyVersion: current.policyVersion + 1,
             applicationControl: current.applicationControl,
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: ClipboardControlConfig(
@@ -625,7 +1106,13 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                 blockedApplications: blockedRules
             ),
             printerControl: current.printerControl,
-            networkFlowControl: current.networkFlowControl
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -754,6 +1241,275 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
         reply(#"{"ok":true}"#)
     }
 
+    func recordOCRScanEvent(_ payloadJSON: String, withReply reply: @escaping (String) -> Void) {
+        guard let data = payloadJSON.data(using: .utf8), data.count <= 32_768,
+              let attempt = try? JSONDecoder().decode(OCRScanEventAttempt.self, from: data) else {
+            reply(errorJSON("Invalid OCR event."))
+            return
+        }
+
+        let validSources = Set(["manual", "screenshot", "discovery", "egress"])
+        let validDecisions = Set(["allowed", "would-block", "blocked"])
+        let validRemediations = Set(["none", "quarantined", "deleted", "remediation-failed"])
+        guard validSources.contains(attempt.source),
+              validDecisions.contains(attempt.decision),
+              validRemediations.contains(attempt.remediation),
+              !attempt.fileType.isEmpty,
+              attempt.fileType.count <= 128,
+              attempt.contentHashPrefix.count == 12,
+              attempt.contentHashPrefix.allSatisfy(\.isHexDigit),
+              (0...OCRClassifier.maximumInputCharacters).contains(attempt.recognizedCharacterCount),
+              (1...500).contains(attempt.pageCount),
+              (0...1).contains(attempt.averageConfidence),
+              (0...600_000).contains(attempt.durationMillis),
+              attempt.ruleIds.count <= 100,
+              attempt.classifications.count <= 100 else {
+            reply(errorJSON("OCR event contains invalid metadata."))
+            return
+        }
+
+        let ruleIds = attempt.ruleIds.compactMap { value -> String? in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !trimmed.isEmpty && trimmed.count <= 256 ? trimmed : nil
+        }
+        guard ruleIds.count == attempt.ruleIds.count,
+              attempt.classifications.count == attempt.ruleIds.count else {
+            reply(errorJSON("OCR event contains invalid classification metadata."))
+            return
+        }
+
+        let policy = policyManager.policyEngine.currentPolicy()
+        let configuredRules = Dictionary(
+            uniqueKeysWithValues: policy.ocrControl.rules.map { ($0.ruleId, $0.classification) }
+        )
+        let classifications = ruleIds.compactMap { configuredRules[$0] }
+        guard classifications.count == ruleIds.count,
+              zip(classifications, attempt.classifications).allSatisfy({ expected, supplied in
+                  expected == supplied.trimmingCharacters(in: .whitespacesAndNewlines)
+              }) else {
+            reply(errorJSON("OCR event references a rule outside the active policy."))
+            return
+        }
+        let expectedMode = attempt.source == "screenshot"
+            ? policy.ocrControl.screenshotMode
+            : policy.ocrControl.mode
+        let expectedDecision: String
+        if ruleIds.isEmpty || expectedMode == .disabled {
+            expectedDecision = "allowed"
+        } else if expectedMode == .auditOnly {
+            expectedDecision = "would-block"
+        } else {
+            expectedDecision = "blocked"
+        }
+        guard attempt.decision == expectedDecision else {
+            reply(errorJSON("OCR event decision does not match active policy."))
+            return
+        }
+
+        let event = ExecutionEvent(
+            module: "ocr-content-classification",
+            action: attempt.source == "screenshot" ? "screenshot-scan" : "file-scan",
+            decision: expectedDecision,
+            ruleId: ruleIds.first,
+            policyVersion: policy.policyVersion,
+            executablePath: "/Applications/VeloxMacDLP.app/Contents/MacOS/VeloxMacDLP",
+            signingId: VeloxControlConstants.hostBundleIdentifier,
+            teamId: VeloxControlConstants.teamIdentifier,
+            pid: 0,
+            parentPid: 0,
+            uid: 0,
+            decisionLatencyMicros: UInt64(attempt.durationMillis) * 1_000,
+            authResponseResult: attempt.usedOCR ? "vision-on-device" : "embedded-pdf-text",
+            resourcePath: attempt.fileType,
+            interaction: attempt.remediation,
+            contentHashPrefix: attempt.contentHashPrefix.lowercased(),
+            fileType: attempt.fileType,
+            classifications: classifications,
+            recognizedCharacterCount: attempt.recognizedCharacterCount,
+            ocrConfidence: attempt.averageConfidence,
+            pageCount: attempt.pageCount
+        )
+        eventLogger.logEventSync(event)
+        if expectedDecision == "blocked" {
+            broadcastBlockedEvent(event)
+        }
+        reply(#"{"ok":true}"#)
+    }
+
+    func recordEndpointDiscoveryEvent(_ payloadJSON: String, withReply reply: @escaping (String) -> Void) {
+        guard let data = payloadJSON.data(using: .utf8), data.count <= 65_536,
+              let attempt = try? JSONDecoder().decode(EndpointDiscoveryEventAttempt.self, from: data),
+              ["finding", "summary"].contains(attempt.kind),
+              ["manual", "scheduled"].contains(attempt.trigger),
+              UUID(uuidString: attempt.scanId) != nil,
+              (0...604_800_000).contains(attempt.durationMillis) else {
+            reply(errorJSON("Invalid Endpoint Data Discovery event."))
+            return
+        }
+
+        let policy = policyManager.policyEngine.currentPolicy()
+        guard policy.endpointDiscoveryControl.mode != .disabled else {
+            reply(errorJSON("Endpoint Data Discovery is disabled in the active policy."))
+            return
+        }
+
+        if attempt.kind == "finding" {
+            let validLocationKinds = Set(["local-home", "mounted-volume", "mounted-share"])
+            let validTagStatuses = Set(["tagged", "audited", "tag-failed"])
+            guard let path = attempt.filePath,
+                  path.hasPrefix("/"), path.count <= 4_096,
+                  !path.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
+                  let fileType = attempt.fileType,
+                  !fileType.isEmpty, fileType.count <= 128,
+                  let hash = attempt.contentHashPrefix,
+                  hash.count == 12, hash.allSatisfy(\.isHexDigit),
+                  let locationKind = attempt.locationKind,
+                  validLocationKinds.contains(locationKind),
+                  let tagStatus = attempt.tagStatus,
+                  validTagStatuses.contains(tagStatus),
+                  !attempt.ruleIds.isEmpty,
+                  attempt.ruleIds.count <= 100,
+                  attempt.classifications.count == attempt.ruleIds.count else {
+                reply(errorJSON("Endpoint Data Discovery finding contains invalid metadata."))
+                return
+            }
+
+            let configuredRules = Dictionary(
+                uniqueKeysWithValues: policy.ocrControl.rules.map { ($0.ruleId, $0.classification) }
+            )
+            let expectedClassifications = attempt.ruleIds.compactMap { configuredRules[$0] }
+            guard expectedClassifications.count == attempt.ruleIds.count,
+                  zip(expectedClassifications, attempt.classifications).allSatisfy({ expected, supplied in
+                      expected == supplied.trimmingCharacters(in: .whitespacesAndNewlines)
+                  }) else {
+                reply(errorJSON("Endpoint Data Discovery finding references a rule outside the active policy."))
+                return
+            }
+
+            let expectedTagStatuses: Set<String>
+            if policy.endpointDiscoveryControl.mode == .enforce &&
+                policy.endpointDiscoveryControl.tagClassifiedFiles {
+                expectedTagStatuses = ["tagged", "tag-failed"]
+            } else {
+                expectedTagStatuses = ["audited"]
+            }
+            guard expectedTagStatuses.contains(tagStatus) else {
+                reply(errorJSON("Endpoint Data Discovery tag status does not match the active policy."))
+                return
+            }
+
+            let event = ExecutionEvent(
+                module: "endpoint-data-discovery",
+                action: "classified-file",
+                decision: tagStatus == "tagged" ? "tagged" : tagStatus == "tag-failed" ? "tag-failed" : "detected",
+                ruleId: attempt.ruleIds.first,
+                policyVersion: policy.policyVersion,
+                executablePath: "/Applications/VeloxMacDLP.app/Contents/MacOS/VeloxMacDLP",
+                signingId: VeloxControlConstants.hostBundleIdentifier,
+                teamId: VeloxControlConstants.teamIdentifier,
+                pid: 0,
+                parentPid: 0,
+                uid: 0,
+                decisionLatencyMicros: UInt64(attempt.durationMillis) * 1_000,
+                authResponseResult: "scheduled-at-rest-scan",
+                resourcePath: path,
+                interaction: "\(locationKind):\(tagStatus)",
+                contentHashPrefix: hash.lowercased(),
+                fileType: fileType,
+                classifications: expectedClassifications
+            )
+            eventLogger.logEventSync(event)
+            if let fileSize = attempt.fileSize,
+               let seconds = attempt.modifiedAtSeconds,
+               let nanoseconds = attempt.modifiedAtNanoseconds,
+               fileSize >= 0,
+               seconds >= 0,
+               (0..<1_000_000_000).contains(nanoseconds) {
+                classificationCache.upsert([FileClassificationRecord(
+                    filePath: path,
+                    fileSize: fileSize,
+                    modifiedAtSeconds: seconds,
+                    modifiedAtNanoseconds: nanoseconds,
+                    contentHashPrefix: hash.lowercased(),
+                    classifications: expectedClassifications,
+                    ruleIds: attempt.ruleIds,
+                    policyVersion: policy.policyVersion
+                )])
+            }
+        } else {
+            let maxFiles = policy.endpointDiscoveryControl.maxFilesPerScan
+            guard let filesEnumerated = attempt.filesEnumerated,
+                  let filesInspected = attempt.filesInspected,
+                  let findingsCount = attempt.findingsCount,
+                  let taggedCount = attempt.taggedCount,
+                  let inaccessibleItems = attempt.inaccessibleItems,
+                  let status = attempt.status,
+                  ["completed", "report-failed"].contains(status),
+                  (0...maxFiles).contains(filesEnumerated),
+                  (0...filesEnumerated).contains(filesInspected),
+                  (0...filesInspected).contains(findingsCount),
+                  (0...findingsCount).contains(taggedCount),
+                  inaccessibleItems >= 0 else {
+                reply(errorJSON("Endpoint Data Discovery summary contains invalid counters."))
+                return
+            }
+            let summary = "enumerated=\(filesEnumerated);inspected=\(filesInspected);findings=\(findingsCount);tagged=\(taggedCount);inaccessible=\(inaccessibleItems)"
+            let event = ExecutionEvent(
+                module: "endpoint-data-discovery",
+                action: "scan-completed",
+                decision: status,
+                ruleId: nil,
+                policyVersion: policy.policyVersion,
+                executablePath: "/Applications/VeloxMacDLP.app/Contents/MacOS/VeloxMacDLP",
+                signingId: VeloxControlConstants.hostBundleIdentifier,
+                teamId: VeloxControlConstants.teamIdentifier,
+                pid: 0,
+                parentPid: 0,
+                uid: 0,
+                decisionLatencyMicros: UInt64(attempt.durationMillis) * 1_000,
+                authResponseResult: "scheduled-at-rest-scan",
+                resourcePath: attempt.scanId.lowercased(),
+                pageURL: summary,
+                interaction: attempt.trigger
+            )
+            eventLogger.logEventSync(event)
+        }
+        reply(#"{"ok":true}"#)
+    }
+
+    func syncEndpointDiscoveryClassifications(
+        _ recordsJSON: String,
+        withReply reply: @escaping (String) -> Void
+    ) {
+        guard let data = recordsJSON.data(using: .utf8), data.count <= 1_048_576,
+              let records = try? JSONDecoder().decode([FileClassificationRecord].self, from: data),
+              records.count <= 500 else {
+            reply(errorJSON("Invalid classification-cache sync payload."))
+            return
+        }
+        let policy = policyManager.policyEngine.currentPolicy()
+        let configuredRules = Dictionary(
+            uniqueKeysWithValues: policy.ocrControl.rules.map { ($0.ruleId, $0.classification) }
+        )
+        let valid = records.filter { record in
+            record.filePath.hasPrefix("/") && record.filePath.count <= 4_096 &&
+                record.fileSize >= 0 && record.modifiedAtSeconds >= 0 &&
+                (0..<1_000_000_000).contains(record.modifiedAtNanoseconds) &&
+                record.contentHashPrefix.count == 12 && record.contentHashPrefix.allSatisfy(\.isHexDigit) &&
+                !record.ruleIds.isEmpty && record.ruleIds.count <= 100 &&
+                record.ruleIds.count == record.classifications.count &&
+                zip(record.ruleIds, record.classifications).allSatisfy { ruleId, classification in
+                    configuredRules[ruleId] == classification
+                }
+        }
+        guard valid.count == records.count else {
+            reply(errorJSON("Classification-cache sync contained untrusted metadata."))
+            return
+        }
+        classificationCache.upsert(valid)
+        reply(#"{"ok":true,"acceptedCount":\#(valid.count)}"#)
+    }
+
     func recordNetworkFlowEvent(_ payloadJSON: String, withReply reply: @escaping (String) -> Void) {
         guard let data = payloadJSON.data(using: .utf8), data.count <= 32_768,
               let received = try? JSONDecoder().decode(ExecutionEvent.self, from: data),
@@ -855,11 +1611,18 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                 allowedApplications: current.applicationControl.allowedApplications
             ),
             webUploadControl: current.webUploadControl,
+            emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
             nearbyTransferControl: current.nearbyTransferControl,
             clipboardControl: current.clipboardControl,
             printerControl: current.printerControl,
-            networkFlowControl: current.networkFlowControl
+            ocrControl: current.ocrControl,
+            endpointDiscoveryControl: current.endpointDiscoveryControl,
+            networkFlowControl: current.networkFlowControl,
+            cloudSyncControl: current.cloudSyncControl,
+            opticalDiskImageControl: current.opticalDiskImageControl,
+            screenWatermarking: current.screenWatermarking,
+            printToPDFControl: current.printToPDFControl
         )
         apply(updated, reply: reply)
     }
@@ -913,6 +1676,11 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                 blockedExecutablePaths: policy.applicationControl.blockedApplications.compactMap(\.executablePath),
                 webUploadMode: policy.webUploadControl.mode.rawValue,
                 webUploadProtectedDirectories: policy.webUploadControl.protectedDirectoryNames,
+                emailAttachmentMode: policy.emailAttachmentControl.mode.rawValue,
+                emailClientCount: policy.emailAttachmentControl.mailClients.count,
+                emailClientSigningIds: policy.emailAttachmentControl.mailClients.compactMap(\.signingId),
+                emailProtectedClassifications: policy.emailAttachmentControl.protectedClassifications,
+                emailCachedClassificationCount: classificationCache.count,
                 usbStorageMode: policy.usbStorageControl.mode.rawValue,
                 usbEncryptionMode: policy.usbStorageControl.encryptionMode.rawValue,
                 usbContainerSizePercent: policy.usbStorageControl.containerSizePercent,
@@ -934,7 +1702,26 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                 printerQueueCount: printer.discoveredQueueCount,
                 printerControlledQueueCount: printer.controlledQueueCount,
                 printerLastError: printer.lastError,
+                ocrMode: policy.ocrControl.mode.rawValue,
+                screenshotOCRMode: policy.ocrControl.screenshotMode.rawValue,
+                screenshotOCRRemediation: policy.ocrControl.screenshotRemediation.rawValue,
+                ocrRuleCount: policy.ocrControl.rules.count,
+                ocrRecognitionLanguages: policy.ocrControl.recognitionLanguages,
+                ocrClassifications: policy.ocrControl.rules.map(\.classification),
+                endpointDiscoveryMode: policy.endpointDiscoveryControl.mode.rawValue,
+                endpointDiscoveryScheduleIntervalMinutes: policy.endpointDiscoveryControl.scheduleIntervalMinutes,
+                endpointDiscoveryIncludesLocalHome: policy.endpointDiscoveryControl.includeLocalHome,
+                endpointDiscoveryIncludesMountedVolumes: policy.endpointDiscoveryControl.includeMountedVolumes,
+                endpointDiscoveryIncludesMountedShares: policy.endpointDiscoveryControl.includeMountedShares,
+                endpointDiscoveryTagsClassifiedFiles: policy.endpointDiscoveryControl.tagClassifiedFiles,
+                endpointDiscoveryMaxFilesPerScan: policy.endpointDiscoveryControl.maxFilesPerScan,
                 networkFlowMode: policy.networkFlowControl.mode.rawValue,
+                cloudSyncMode: policy.cloudSyncControl.mode.rawValue,
+                opticalDiskImageMode: policy.opticalDiskImageControl.mode.rawValue,
+                opticalDiskImageBlocksDiskImages: policy.opticalDiskImageControl.blockDiskImages,
+                opticalDiskImageBlocksOpticalMedia: policy.opticalDiskImageControl.blockOpticalMedia,
+                screenWatermarkingMode: policy.screenWatermarking.mode.rawValue,
+                printToPDFMode: policy.printToPDFControl.mode.rawValue,
                 networkFlowDefaultAction: policy.networkFlowControl.defaultAction.rawValue,
                 networkFlowRuleCount: policy.networkFlowControl.rules.count,
                 networkFlowRules: policy.networkFlowControl.rules,

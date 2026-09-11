@@ -23,6 +23,12 @@ final class ExtensionControlClient: @unchecked Sendable {
         }
     }
 
+    func setEmailAttachmentConfig(_ configJSON: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setEmailAttachmentConfig(configJSON, withReply: completion)
+        }
+    }
+
     func setUSBStorageMode(_ mode: String, completion: @escaping (String) -> Void) {
         withProxy(completion: completion) { proxy in
             proxy.setUSBStorageMode(mode, withReply: completion)
@@ -50,6 +56,54 @@ final class ExtensionControlClient: @unchecked Sendable {
     func setPrinterMode(_ mode: String, completion: @escaping (String) -> Void) {
         withProxy(completion: completion) { proxy in
             proxy.setPrinterMode(mode, withReply: completion)
+        }
+    }
+
+    func setOCRMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setOCRMode(mode, withReply: completion)
+        }
+    }
+
+    func setScreenshotOCRMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setScreenshotOCRMode(mode, withReply: completion)
+        }
+    }
+
+    func setEndpointDiscoveryConfig(_ configJSON: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setEndpointDiscoveryConfig(configJSON, withReply: completion)
+        }
+    }
+
+    func setCloudSyncMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setCloudSyncMode(mode, withReply: completion)
+        }
+    }
+
+    func setOpticalDiskImageMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setOpticalDiskImageMode(mode, withReply: completion)
+        }
+    }
+
+    func setOpticalDiskImageConfig(_ configJSON: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setOpticalDiskImageConfig(configJSON, withReply: completion)
+        }
+    }
+
+    func setScreenWatermarkingMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setScreenWatermarkingMode(mode, withReply: completion)
+        }
+    }
+
+    func setPrintToPDFMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setPrintToPDFMode(mode, withReply: completion)
         }
     }
 
@@ -104,6 +158,24 @@ final class ExtensionControlClient: @unchecked Sendable {
     func recordBrowserUploadAttempt(_ payloadJSON: String, completion: @escaping (String) -> Void) {
         withProxy(completion: completion) { proxy in
             proxy.recordBrowserUploadAttempt(payloadJSON, withReply: completion)
+        }
+    }
+
+    func recordOCRScanEvent(_ payloadJSON: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.recordOCRScanEvent(payloadJSON, withReply: completion)
+        }
+    }
+
+    func recordEndpointDiscoveryEvent(_ payloadJSON: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.recordEndpointDiscoveryEvent(payloadJSON, withReply: completion)
+        }
+    }
+
+    func syncEndpointDiscoveryClassifications(_ recordsJSON: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.syncEndpointDiscoveryClassifications(recordsJSON, withReply: completion)
         }
     }
 

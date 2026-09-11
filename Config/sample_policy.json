@@ -21,6 +21,14 @@
       "Public"
     ]
   },
+  "emailAttachmentControl": {
+    "mode": "audit-only",
+    "mailClients": [
+      { "ruleId": "email-apple-mail", "signingId": "com.apple.mail", "isPlatformBinary": true },
+      { "ruleId": "email-microsoft-outlook", "signingId": "com.microsoft.Outlook", "teamId": "UBF8T346G9" }
+    ],
+    "protectedClassifications": []
+  },
   "usbStorageControl": {
     "mode": "enforce",
     "blockExternalStorage": true,
@@ -48,6 +56,60 @@
   "printerControl": {
     "mode": "disabled",
     "blockAllPrinters": true
+  },
+  "opticalDiskImageControl": {
+    "mode": "disabled",
+    "blockDiskImages": true,
+    "blockOpticalMedia": true
+  },
+  "printToPDFControl": {
+    "mode": "disabled",
+    "blockSaveAsPDF": true
+  },
+  "ocrControl": {
+    "mode": "enforce",
+    "screenshotMode": "audit-only",
+    "screenshotRemediation": "quarantine",
+    "recognitionLanguages": ["en-US"],
+    "minimumConfidence": 0.5,
+    "maxFileSizeMB": 100,
+    "maxPDFPages": 100,
+    "rules": [
+      {
+        "ruleId": "ocr-payment-card",
+        "name": "Payment card number",
+        "classification": "Payment Card Data",
+        "type": "credit-card"
+      },
+      {
+        "ruleId": "ocr-indian-pan",
+        "name": "Indian PAN",
+        "classification": "Indian Tax Identifier",
+        "type": "indian-pan"
+      },
+      {
+        "ruleId": "ocr-aadhaar",
+        "name": "Aadhaar number",
+        "classification": "Indian Identity Data",
+        "type": "aadhaar"
+      },
+      {
+        "ruleId": "ocr-confidential-keywords",
+        "name": "Confidential document markers",
+        "classification": "Confidential Document",
+        "type": "keyword",
+        "keywords": ["confidential", "restricted", "internal only"]
+      }
+    ]
+  },
+  "endpointDiscoveryControl": {
+    "mode": "audit-only",
+    "scheduleIntervalMinutes": 1440,
+    "includeLocalHome": true,
+    "includeMountedVolumes": true,
+    "includeMountedShares": true,
+    "tagClassifiedFiles": true,
+    "maxFilesPerScan": 10000
   },
   "networkFlowControl": {
     "mode": "disabled",

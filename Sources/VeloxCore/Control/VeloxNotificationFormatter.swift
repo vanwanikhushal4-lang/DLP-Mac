@@ -41,6 +41,17 @@ public enum VeloxNotificationFormatter {
             }
             return FormattedNotification(title: title, subtitle: subtitle, body: body)
 
+        case "email-attachment-control":
+            let subtitle = "Email Attachment Blocked"
+            let fileName = parseFileName(from: target)
+            let parts = detail.split(separator: "|", maxSplits: 1).map(String.init)
+            let client = parts.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Mail"
+            let classification = parts.count > 1 && !parts[1].isEmpty
+                ? parts[1]
+                : "classified content"
+            let body = "Attaching '\(fileName)' in \(client) was blocked because it contains \(classification)."
+            return FormattedNotification(title: title, subtitle: subtitle, body: body)
+
         case "usb-storage-control":
             let subtitle = "USB Storage Blocked"
             let volumeName = parseVolumeName(from: target)
@@ -51,6 +62,14 @@ public enum VeloxNotificationFormatter {
             let subtitle = "USB Encryption Required"
             let volumeName = parseVolumeName(from: target)
             let body = "A plaintext copy to '\(volumeName)' was blocked. Copy into Velox Secure USB instead."
+            return FormattedNotification(title: title, subtitle: subtitle, body: body)
+
+        case "optical-disk-image-control":
+            let volumeName = parseVolumeName(from: target)
+            let isOpticalMedia = action.hasPrefix("optical-media")
+            let subtitle = isOpticalMedia ? "Optical Media Blocked" : "Disk Image Blocked"
+            let kind = isOpticalMedia ? "Optical media" : "Disk image"
+            let body = "\(kind) '\(volumeName)' was blocked from mounting by security policy."
             return FormattedNotification(title: title, subtitle: subtitle, body: body)
 
         case "nearby-transfer-control":
@@ -81,6 +100,28 @@ public enum VeloxNotificationFormatter {
             let queue = target.trimmingCharacters(in: .whitespacesAndNewlines)
             let destination = queue.isEmpty ? "this printer" : "printer '\(queue)'"
             let body = "Printing to \(destination) was blocked by security policy."
+            return FormattedNotification(title: title, subtitle: subtitle, body: body)
+
+        case "print-to-pdf-control":
+            let subtitle = "PDF File Output Blocked"
+            let fileName = parseFileName(from: target)
+            let application = parseApplicationName(from: detail, detail: "")
+            let body = "Creating '\(fileName)' from \(application) was blocked by security policy."
+            return FormattedNotification(title: title, subtitle: subtitle, body: body)
+
+        case "ocr-content-classification":
+            let isScreenshot = action == "screenshot-scan"
+            let subtitle = isScreenshot ? "Sensitive Screenshot Blocked" : "Sensitive Visual Content Blocked"
+            let classifications = detail
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .prefix(3)
+                .joined(separator: ", ")
+            let content = classifications.isEmpty ? "sensitive content" : classifications
+            let body = isScreenshot
+                ? "Velox DLP detected \(content) and secured the screenshot."
+                : "Velox DLP detected \(content) in visual content."
             return FormattedNotification(title: title, subtitle: subtitle, body: body)
 
         case "network-flow-control":

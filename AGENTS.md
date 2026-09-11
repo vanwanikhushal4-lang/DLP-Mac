@@ -12,7 +12,7 @@ VeloxMacDLP is the macOS endpoint agent for a backend-managed DLP product. The p
 4. The bundled React console is a local prototype/admin surface, not the long-term policy authority.
 5. Events are structured for later backend delivery and must never contain clipboard contents or other unnecessary sensitive payloads.
 
-Current prototype modules are Application Control, Web Upload Control, USB Storage Control, USB Encryption/Container, AirDrop/Bluetooth Transfer Control, Clipboard Control, and Printer Control.
+Current prototype modules are Application Control, Web Upload Control, Email Attachment Control, USB Storage Control, USB Encryption/Container, Optical & Disk Image Control, AirDrop/Bluetooth Transfer Control, Clipboard Control, Printer Control, Print-to-PDF / File Control, Network Flow Control, OCR Content Classification, and Endpoint Data Discovery.
 
 ## Architecture
 
@@ -46,6 +46,7 @@ Network Filter decisions are sent over an asynchronous, write-only XPC event sin
 - **Do not log sensitive content.** Clipboard logging is limited to source identity, coarse content categories, item count, and decision. Do not add copied text, image bytes, or file paths to clipboard telemetry.
 - **Do not confuse observation with kernel authorization.** Endpoint Security can deny exec, open, and mount authorization events. macOS exposes no Endpoint Security clipboard event; Clipboard Control is a user-session pasteboard monitor and must be described as such.
 - **Downloads remain allowed.** Browser upload enforcement must not deny write/finalization paths used by downloads.
+- **Email classification must be fresh.** Native-mail enforcement may deny only metadata-matched records from Endpoint Data Discovery. Modified and unscanned files fail open; never claim recipient or Send-event visibility.
 - **Incoming nearby transfers remain allowed.** Nearby-transfer rules target outbound read access; ordinary Bluetooth accessories remain outside that feature.
 
 ## Runtime files
@@ -56,6 +57,8 @@ Network Filter decisions are sent over an asynchronous, write-only XPC event sin
 - Printer restoration state: `/Library/Application Support/VeloxMacDLP/printer-state.json`
 - USB container recovery keys: `/Library/Application Support/VeloxMacDLP/usb-container-keys.json`
 - Structured activity log: `/Library/Logs/VeloxMacDLP/events.jsonl`
+- Sensitive screenshot quarantine: `~/Library/Application Support/VeloxMacDLP/Quarantine/Screenshots/`
+- Endpoint discovery reports: `~/Library/Application Support/VeloxMacDLP/Discovery/Reports/`
 - XPC Mach service: `L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc`
 - Host bundle ID: `co.velox.macdlp`
 - System extension bundle ID: `co.velox.macdlp.endpointsecurity`
@@ -136,6 +139,12 @@ Uses Endpoint Security mount authorization and blocks only external mount dispos
 
 This is mutually exclusive with whole-device mount blocking. Enforce mode allows physical external media to mount, provisions `.velox/VeloxSecure.sparsebundle` as AES-256 encrypted APFS, mounts it as `Velox Secure USB`, and denies ordinary plaintext mutations to the outer volume through Endpoint Security `AUTH_OPEN`, `AUTH_CREATE`, and `AUTH_COPYFILE`. Only the authenticated Velox ES client and exact Apple disk-image helpers may update `.velox`. Recovery keys are root-only and local in the prototype; production requires backend-wrapped key escrow, recovery, rotation, and revocation. Endpoint Security cannot redirect a Finder copy, so never describe the separate secure-volume workflow as transparent redirection.
 
+### Optical & Disk Image Control
+
+Uses Endpoint Security `AUTH_MOUNT` and `AUTH_REMOUNT`. Disk-image detection is based on Apple's `ES_MOUNT_DISPOSITION_VIRTUAL`, not filename extensions, so it covers virtual file-backed mounts such as DMG, ISO, sparseimage, and sparsebundle volumes. Physical optical media is recognized by CD9660, CDDA, and UDF-family filesystem types and is excluded when macOS classifies the mount as internal, network, or nullfs. Do not infer optical media from a generic `/Volumes` path.
+
+Velox's own encrypted USB sparse bundle requires a narrow exception: only a currently active coordinator token, an authentic Apple platform mount process, and the exact `Velox Secure USB` volume name (or macOS numeric suffix) may bypass disk-image denial. Never broaden this allowance by path prefix, caller PID, or an unauthenticated volume label.
+
 ### AirDrop and Bluetooth Transfer Control
 
 Uses `AUTH_OPEN` for known sharing services reading protected files. `sharingd` serves more than AirDrop, so events must say Apple nearby sharing when the exact Share Sheet destination is unknowable. Full fleet AirDrop disablement requires an MDM Restrictions payload.
@@ -148,7 +157,23 @@ Has three policy states: `disabled`, `block-all`, and `block-selected-apps`. In 
 
 ### Printer Control
 
-The current prototype uses root-side CUPS queue reconciliation. Enforce mode rejects new jobs, stops every configured queue, and cancels queued jobs; audit mode records pending jobs without document titles or content. Original queue state is persisted before mutation and only Velox-managed state is restored. Endpoint Security has no print authorization event. Content classification and watermarking require a separate signed CUPS filter, and Save as PDF belongs to the separate Print-to-PDF control module.
+The current prototype uses root-side CUPS queue reconciliation. Enforce mode rejects new jobs, stops every configured queue, and cancels queued jobs; audit mode records pending jobs without document titles or content. Original queue state is persisted before mutation and only Velox-managed state is restored. Endpoint Security has no physical-print authorization event. Content classification and watermarking require a separate signed CUPS filter.
+
+### Print-to-PDF / File Control
+
+Uses Endpoint Security `AUTH_CREATE` to deny new `.pdf` files created by applications in standard user content folders. This covers the normal Save as PDF path and equivalent application PDF exports, including direct PDF output from browsers. macOS does not reveal which UI command initiated a file create, so events and UI must say PDF file output rather than claiming exact print-dialog attribution. Browser partial-download staging names do not match `.pdf`, and final rename is not denied, so normal staged downloads remain outside this authorization path. Existing-file overwrite, direct-to-final browser downloads, and atomic rename behaviors require explicit application-by-application acceptance testing; do not claim those paths are covered until they have a matching authorization implementation and tests.
+
+### OCR Content Classification
+
+The host performs on-device text recognition with Apple Vision for images and image-only PDF pages; PDFKit extracts embedded PDF text first. OCR and classification run asynchronously and never inside an Endpoint Security authorization deadline. The policy supports keyword, regular-expression, Luhn-valid payment-card, Indian PAN, and Verhoeff-valid Aadhaar rules.
+
+Recognized text and image bytes are memory-only. Events may contain a short SHA-256 prefix, file type, rule IDs, classification names, counts, timing, and confidence, but never recognized text or source file paths. Screenshot candidates must originate from Apple's signed screenshot tools. Screenshot enforcement is post-capture remediation: matching images are moved to the per-user quarantine by default, or deleted only when policy explicitly selects deletion. Never describe it as pre-capture prevention.
+
+### Endpoint Data Discovery
+
+Runs asynchronously in the logged-in host and uses the shared OCR/content rules to inspect supported images, PDFs, and plain-text files. Coverage includes the current user's home directory, mounted external volumes, and mounted non-local shares according to policy. Full Disk Access is required for complete protected-folder coverage, and a share must already be connected and authenticated.
+
+Audit mode reports findings without changing files. Enforce mode can write the `com.velox.macdlp.classification` extended attribute; read-only or xattr-incompatible filesystems remain report-only and must surface a tag failure. Discovery reports may include file paths because location is required for remediation, but they must never include extracted text or file content. Do not describe this feature as a full Office-document classifier until Office extraction is implemented.
 
 ## Change checklist
 

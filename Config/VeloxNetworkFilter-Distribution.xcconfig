@@ -1,0 +1,5 @@
+// Developer ID builds use the system-extension variant required outside the Mac App Store.
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = Developer ID Application
+PROVISIONING_PROFILE_SPECIFIER = Mac Team Direct Provisioning Profile: co.velox.macdlp.networkfilter
+CODE_SIGN_ENTITLEMENTS = Sources/VeloxNetworkFilter/VeloxNetworkFilterDeveloperID.entitlements

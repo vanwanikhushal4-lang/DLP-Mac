@@ -3,6 +3,10 @@ options:
   bundleIdPrefix: co.velox
   deploymentTarget:
     macOS: "14.0"
+configs:
+  Debug: debug
+  Release: release
+  Distribution: release
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -10,6 +14,14 @@ settings:
     CODE_SIGN_STYLE: "Automatic"
     DEVELOPMENT_TEAM: "L7US4BH7Q2"
     ENABLE_HARDENED_RUNTIME: YES
+schemes:
+  VeloxOCRTests:
+    build:
+      targets:
+        VeloxOCRTests: test
+    test:
+      targets:
+        - VeloxOCRTests
 targets:
   VeloxCore:
     type: library.static
@@ -23,10 +35,13 @@ targets:
         SKIP_INSTALL: YES
         ENABLE_HARDENED_RUNTIME: YES
         OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
-
   VeloxExtension:
     type: system-extension
     platform: macOS
+    configFiles:
+      Debug: Config/VeloxEndpointSecurity-Development.xcconfig
+      Release: Config/VeloxEndpointSecurity-Development.xcconfig
+      Distribution: Config/VeloxEndpointSecurity-Distribution.xcconfig
     sources:
       - path: Sources/VeloxExtension/main.swift
       - path: Sources/VeloxExtension/ControlService.swift
@@ -36,14 +51,10 @@ targets:
       path: Sources/VeloxExtension/Info.plist
       properties:
         CFBundlePackageType: SYSX
-        CFBundleShortVersionString: "1.8.5"
-        CFBundleVersion: "20"
+        CFBundleShortVersionString: "1.13.0"
+        CFBundleVersion: "29"
         NSSystemExtensionUsageDescription: Velox Mac DLP monitors and controls application execution to enforce organizational security policy.
         NSEndpointSecurityMachServiceName: L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc
-    entitlements:
-      path: Sources/VeloxExtension/VeloxMacDLPSE.entitlements
-      properties:
-        com.apple.developer.endpoint-security.client: true
     dependencies:
       - target: VeloxCore
     settings:
@@ -51,15 +62,16 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp.endpointsecurity
         PRODUCT_NAME: co.velox.macdlp.endpointsecurity
         WRAPPER_EXTENSION: systemextension
-        CODE_SIGN_STYLE: "Automatic"
-        CODE_SIGN_ENTITLEMENTS: Sources/VeloxExtension/VeloxMacDLPSE.entitlements
         DEVELOPMENT_TEAM: "L7US4BH7Q2"
         ENABLE_HARDENED_RUNTIME: YES
         OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
-
   VeloxSafariUploadGuard:
     type: app-extension
     platform: macOS
+    configFiles:
+      Debug: Config/VeloxSafariUploadGuard-Development.xcconfig
+      Release: Config/VeloxSafariUploadGuard-Development.xcconfig
+      Distribution: Config/VeloxSafariUploadGuard-Distribution.xcconfig
     sources:
       - path: Sources/VeloxSafariUploadGuard/SafariWebExtensionHandler.swift
       - path: Sources/VeloxSafariUploadGuard/SafariUploadGuardControlClient.swift
@@ -73,8 +85,8 @@ targets:
       path: Sources/VeloxSafariUploadGuard/Info.plist
       properties:
         CFBundleDisplayName: Velox DLP Upload Guard
-        CFBundleShortVersionString: "1.8.5"
-        CFBundleVersion: "20"
+        CFBundleShortVersionString: "1.13.0"
+        CFBundleVersion: "29"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.Safari.web-extension
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
@@ -88,16 +100,18 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp.uploadguard
         PRODUCT_NAME: VeloxDLPUploadGuard
-        CODE_SIGN_STYLE: "Automatic"
         CODE_SIGN_ENTITLEMENTS: Sources/VeloxSafariUploadGuard/VeloxSafariUploadGuard.entitlements
         DEVELOPMENT_TEAM: "L7US4BH7Q2"
         ENABLE_APP_SANDBOX: YES
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
-
   VeloxNetworkFilter:
     type: system-extension
     platform: macOS
+    configFiles:
+      Debug: Config/VeloxNetworkFilter-Development.xcconfig
+      Release: Config/VeloxNetworkFilter-Development.xcconfig
+      Distribution: Config/VeloxNetworkFilter-Distribution.xcconfig
     sources:
       - path: Sources/VeloxNetworkFilter/main.swift
       - path: Sources/VeloxNetworkFilter/FilterDataProvider.swift
@@ -106,23 +120,13 @@ targets:
       path: Sources/VeloxNetworkFilter/Info.plist
       properties:
         CFBundlePackageType: SYSX
-        CFBundleShortVersionString: "1.8.5"
-        CFBundleVersion: "20"
+        CFBundleShortVersionString: "1.13.0"
+        CFBundleVersion: "29"
         NSSystemExtensionUsageDescription: Velox Mac DLP monitors and filters outbound network flow connections according to organizational security policy.
         NetworkExtension:
           NEMachServiceName: $(TeamIdentifierPrefix)co.velox.macdlp.networkfilter.xpc
           NEProviderClasses:
             com.apple.networkextension.filter-data: $(PRODUCT_MODULE_NAME).FilterDataProvider
-    entitlements:
-      path: Sources/VeloxNetworkFilter/VeloxNetworkFilter.entitlements
-      properties:
-        com.apple.developer.networking.networkextension:
-          - content-filter-provider
-        com.apple.security.app-sandbox: true
-        com.apple.security.application-groups:
-          - $(TeamIdentifierPrefix)co.velox.macdlp
-        com.apple.security.temporary-exception.mach-lookup.global-name:
-          - L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc
     dependencies:
       - target: VeloxCore
     settings:
@@ -130,15 +134,16 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp.networkfilter
         PRODUCT_NAME: co.velox.macdlp.networkfilter
         WRAPPER_EXTENSION: systemextension
-        CODE_SIGN_STYLE: "Automatic"
-        CODE_SIGN_ENTITLEMENTS: Sources/VeloxNetworkFilter/VeloxNetworkFilter.entitlements
         DEVELOPMENT_TEAM: "L7US4BH7Q2"
         ENABLE_HARDENED_RUNTIME: YES
         OTHER_LDFLAGS: ["$(inherited)", "-framework", "NetworkExtension", "-lEndpointSecurity"]
-
   VeloxMacDLP:
     type: application
     platform: macOS
+    configFiles:
+      Debug: Config/VeloxMacDLP-Development.xcconfig
+      Release: Config/VeloxMacDLP-Development.xcconfig
+      Distribution: Config/VeloxMacDLP-Distribution.xcconfig
     sources:
       - path: Sources/VeloxApp/AppDelegate.swift
       - path: Sources/VeloxApp/BundledWebSchemeHandler.swift
@@ -147,28 +152,26 @@ targets:
       - path: Sources/VeloxApp/ExtensionControlClient.swift
       - path: Sources/VeloxApp/InstalledApplicationScanner.swift
       - path: Sources/VeloxApp/PasteboardMonitor.swift
+      - path: Sources/VeloxApp/OCRService.swift
+      - path: Sources/VeloxApp/EndpointDiscoveryService.swift
+      - path: Sources/VeloxApp/ScreenshotOCRMonitor.swift
       - path: Sources/VeloxApp/VeloxNotificationManager.swift
       - path: Sources/VeloxApp/VeloxActiveEventMonitor.swift
       - path: Web/dist
         type: folder
         buildPhase: resources
+      - path: Resources/VeloxAppIcon.icns
+        buildPhase: resources
     info:
       path: Sources/VeloxApp/Info.plist
       properties:
-        CFBundleShortVersionString: "1.8.5"
-        CFBundleVersion: "20"
+        CFBundleIconFile: VeloxAppIcon
+        CFBundleShortVersionString: "1.13.0"
+        CFBundleVersion: "29"
         LSUIElement: true
         SBAppUsesLocalNotifications: true
         NSUserNotificationAlertStyle: alert
         NSSystemExtensionUsageDescription: Velox Mac DLP installs security and network-filter system extensions to enforce organizational data-loss-prevention policy.
-    entitlements:
-      path: Sources/VeloxApp/VeloxMacDLP.entitlements
-      properties:
-        com.apple.developer.networking.networkextension:
-          - content-filter-provider
-        com.apple.developer.system-extension.install: true
-        com.apple.security.application-groups:
-          - $(TeamIdentifierPrefix)co.velox.macdlp
     dependencies:
       - target: VeloxCore
       - target: VeloxExtension
@@ -186,12 +189,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: co.velox.macdlp
         PRODUCT_NAME: VeloxMacDLP
-        CODE_SIGN_STYLE: "Automatic"
-        CODE_SIGN_ENTITLEMENTS: Sources/VeloxApp/VeloxMacDLP.entitlements
         DEVELOPMENT_TEAM: "L7US4BH7Q2"
         ENABLE_HARDENED_RUNTIME: YES
-        OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
-
+        OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity", "-framework", "Vision", "-framework", "PDFKit", "-framework", "ImageIO"]
   VeloxCoreTests:
     type: bundle.unit-test
     platform: macOS
@@ -205,3 +205,21 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         ENABLE_HARDENED_RUNTIME: NO
         OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity"]
+  VeloxOCRTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/VeloxAppTests/OCRServiceTests.swift
+      - path: Tests/VeloxAppTests/EndpointDiscoveryServiceTests.swift
+      - path: Sources/VeloxApp/OCRService.swift
+      - path: Sources/VeloxApp/EndpointDiscoveryService.swift
+      - path: Sources/VeloxApp/ExtensionControlClient.swift
+      - path: Sources/VeloxApp/VeloxNotificationManager.swift
+    dependencies:
+      - target: VeloxCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: co.velox.ocr.tests
+        GENERATE_INFOPLIST_FILE: YES
+        ENABLE_HARDENED_RUNTIME: NO
+        OTHER_LDFLAGS: ["$(inherited)", "-lEndpointSecurity", "-framework", "Vision", "-framework", "PDFKit", "-framework", "ImageIO"]

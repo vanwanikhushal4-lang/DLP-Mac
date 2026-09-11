@@ -40,6 +40,8 @@ public final class EndpointSecurityService: @unchecked Sendable {
     private let logger: EventLogger
     private let healthPath: String
     private let usbEncryptionAccessController: USBEncryptionAccessController
+    private let classificationCache: FileClassificationCache
+    private let managedVirtualMountAllowance: ManagedVirtualMountAllowance
 
     private let stateLock = os_unfair_lock_t.allocate(capacity: 1)
     private var isRunning: Bool = false
@@ -49,6 +51,7 @@ public final class EndpointSecurityService: @unchecked Sendable {
     private var startTimeString: String = ""
     private var eventBlockedHandler: (@Sendable (ExecutionEvent) -> Void)?
     private var volumeTopologyChangedHandler: (@Sendable () -> Void)?
+    private var screenshotCreatedHandler: (@Sendable (String) -> Void)?
 
     public var onEventBlocked: (@Sendable (ExecutionEvent) -> Void)? {
         get {
@@ -76,6 +79,21 @@ public final class EndpointSecurityService: @unchecked Sendable {
         }
     }
 
+    /// Delivers only file creates attributed to Apple's signed screenshot tools.
+    /// The callback runs after the AUTH_CREATE response and must never delay it.
+    public var onPotentialScreenshotCreated: (@Sendable (String) -> Void)? {
+        get {
+            os_unfair_lock_lock(stateLock)
+            defer { os_unfair_lock_unlock(stateLock) }
+            return screenshotCreatedHandler
+        }
+        set {
+            os_unfair_lock_lock(stateLock)
+            screenshotCreatedHandler = newValue
+            os_unfair_lock_unlock(stateLock)
+        }
+    }
+
     private func notifyBlockedIfHandlerPresent(_ event: ExecutionEvent) {
         os_unfair_lock_lock(stateLock)
         let handler = eventBlockedHandler
@@ -87,11 +105,15 @@ public final class EndpointSecurityService: @unchecked Sendable {
         policyEngine: PolicyEngine,
         logger: EventLogger,
         usbEncryptionAccessController: USBEncryptionAccessController = USBEncryptionAccessController(),
+        classificationCache: FileClassificationCache = FileClassificationCache(),
+        managedVirtualMountAllowance: ManagedVirtualMountAllowance = ManagedVirtualMountAllowance(),
         healthPath: String = "/Library/Application Support/VeloxMacDLP/health.json"
     ) {
         self.policyEngine = policyEngine
         self.logger = logger
         self.usbEncryptionAccessController = usbEncryptionAccessController
+        self.classificationCache = classificationCache
+        self.managedVirtualMountAllowance = managedVirtualMountAllowance
         self.healthPath = healthPath
         self.stateLock.initialize(to: os_unfair_lock())
     }
@@ -158,7 +180,8 @@ public final class EndpointSecurityService: @unchecked Sendable {
 
             // AUTH_EXEC enforces application control.
             // AUTH_OPEN enforces web upload and USB encrypted-container writes.
-            // AUTH_CREATE/AUTH_COPYFILE prevent plaintext creation on managed USB volumes.
+            // AUTH_CREATE enforces new PDF output and, with AUTH_COPYFILE, prevents
+            // plaintext creation on managed USB volumes.
             // AUTH_MOUNT & AUTH_REMOUNT enforce USB / removable media protection.
             // Mount notifications trigger encrypted-container reconciliation.
             var events = [
@@ -404,6 +427,59 @@ public final class EndpointSecurityService: @unchecked Sendable {
             return
         }
 
+        let cachedClassification = classificationCache.lookup(
+            filePath: filePath,
+            fileSize: Int64(file.stat.st_size),
+            modifiedAtSeconds: Int64(file.stat.st_mtimespec.tv_sec),
+            modifiedAtNanoseconds: Int64(file.stat.st_mtimespec.tv_nsec)
+        )
+        let emailDecision = policyEngine.evaluateEmailAttachmentOpen(
+            process: process,
+            filePath: filePath,
+            requestedFlags: requestedFlags,
+            isRegularFile: isRegularFile,
+            classification: cachedClassification
+        )
+
+        if emailDecision.isAttachmentCandidate {
+            let allowedFlags: UInt32 = emailDecision.shouldAllowOpen ? UInt32.max : 0
+            let response = es_respond_flags_result(client, message, allowedFlags, false)
+            let responseStatus = response == ES_RESPOND_RESULT_SUCCESS
+                ? "success"
+                : "failed_code_\(response.rawValue)"
+            let latencyMicros = max(1, UInt64((DispatchTime.now().uptimeNanoseconds - startNs) / 1_000))
+            let event = ExecutionEvent(
+                timestamp: nil,
+                eventId: UUID().uuidString,
+                module: "email-attachment-control",
+                action: "native-mail-classified-file-read",
+                decision: emailDecision.decisionString,
+                ruleId: emailDecision.matchingRuleId,
+                policyVersion: emailDecision.policyVersion,
+                executablePath: process.executablePath,
+                signingId: process.signingId,
+                teamId: process.teamId,
+                pid: process.pid,
+                parentPid: process.parentPid,
+                uid: process.uid,
+                decisionLatencyMicros: latencyMicros,
+                authResponseResult: responseStatus,
+                resourcePath: filePath,
+                requestedOpenFlags: requestedFlags,
+                interaction: emailDecision.mailClientName,
+                contentHashPrefix: emailDecision.contentHashPrefix,
+                classifications: emailDecision.classifications
+            )
+            logger.logEventAsync(event)
+            if emailDecision.decisionString == "blocked" && response == ES_RESPOND_RESULT_SUCCESS {
+                notifyBlockedIfHandlerPresent(event)
+            }
+            if response != ES_RESPOND_RESULT_SUCCESS {
+                fputs("[VeloxEndpointSecurityService] CRITICAL: email AUTH_OPEN response failed: \(response.rawValue)\n", stderr)
+            }
+            return
+        }
+
         let decision = policyEngine.evaluateWebUploadOpen(
             process: process,
             filePath: filePath,
@@ -475,22 +551,91 @@ public final class EndpointSecurityService: @unchecked Sendable {
         }
 
         let process = extractProcessContext(target: msg.process.pointee)
-        guard let decision = usbEncryptionAccessController.evaluateMutation(
+        if let decision = usbEncryptionAccessController.evaluateMutation(
             process: process,
             destinationPath: destinationPath,
             operation: .create
-        ) else {
-            _ = es_respond_auth_result(client, message, ES_AUTH_RESULT_ALLOW, false)
+        ) {
+            respondToUSBEncryptionMutation(
+                client: client,
+                message: message,
+                process: process,
+                decision: decision,
+                startNs: startNs,
+                usesOpenFlagsResponse: false
+            )
             return
         }
-        respondToUSBEncryptionMutation(
-            client: client,
-            message: message,
+
+        let pdfDecision = policyEngine.evaluatePrintToPDFCreate(
             process: process,
-            decision: decision,
-            startNs: startNs,
-            usesOpenFlagsResponse: false
+            destinationPath: destinationPath
         )
+        if pdfDecision.isPDFOutputCandidate {
+            respondToPrintToPDFCreate(
+                client: client,
+                message: message,
+                process: process,
+                destinationPath: destinationPath,
+                decision: pdfDecision,
+                startNs: startNs
+            )
+            return
+        }
+
+        let response = es_respond_auth_result(client, message, ES_AUTH_RESULT_ALLOW, false)
+        if response == ES_RESPOND_RESULT_SUCCESS,
+           isAppleScreenshotProcess(process),
+           Self.isOCRCompatibleScreenshotPath(destinationPath) {
+            notifyPotentialScreenshotCreated(destinationPath)
+        }
+    }
+
+    private func respondToPrintToPDFCreate(
+        client: OpaquePointer,
+        message: UnsafePointer<es_message_t>,
+        process: ProcessContext,
+        destinationPath: String,
+        decision: PrintToPDFDecision,
+        startNs: UInt64
+    ) {
+        let response = es_respond_auth_result(
+            client,
+            message,
+            decision.shouldAllowCreate ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY,
+            false
+        )
+        let responseStatus = response == ES_RESPOND_RESULT_SUCCESS
+            ? "success"
+            : "failed_code_\(response.rawValue)"
+        let latencyMicros = max(1, UInt64((DispatchTime.now().uptimeNanoseconds - startNs) / 1_000))
+        let event = ExecutionEvent(
+            module: "print-to-pdf-control",
+            action: "pdf-file-create",
+            decision: decision.decisionString,
+            ruleId: decision.matchingRuleId,
+            policyVersion: decision.policyVersion,
+            executablePath: process.executablePath,
+            signingId: process.signingId,
+            teamId: process.teamId,
+            pid: process.pid,
+            parentPid: process.parentPid,
+            uid: process.uid,
+            decisionLatencyMicros: latencyMicros,
+            authResponseResult: responseStatus,
+            resourcePath: destinationPath,
+            interaction: "new-pdf-output"
+        )
+        logger.logEventAsync(event)
+        if decision.decisionString == "blocked" && response == ES_RESPOND_RESULT_SUCCESS {
+            notifyBlockedIfHandlerPresent(event)
+        }
+        if response != ES_RESPOND_RESULT_SUCCESS {
+            fputs(
+                "[VeloxEndpointSecurityService] CRITICAL: Print-to-PDF AUTH_CREATE response failed: \(response.rawValue)\n",
+                stderr
+            )
+        }
     }
 
     private func handleCopyFileMessage(
@@ -592,6 +737,29 @@ public final class EndpointSecurityService: @unchecked Sendable {
         handler?()
     }
 
+    private func notifyPotentialScreenshotCreated(_ path: String) {
+        os_unfair_lock_lock(stateLock)
+        let handler = screenshotCreatedHandler
+        os_unfair_lock_unlock(stateLock)
+        handler?(path)
+    }
+
+    private func isAppleScreenshotProcess(_ process: ProcessContext) -> Bool {
+        guard process.isPlatformBinary else { return false }
+        let signingId = process.signingId?.lowercased() ?? ""
+        let executablePath = process.executablePath.lowercased()
+        return signingId == "com.apple.screencapture"
+            || signingId == "com.apple.screenshot"
+            || signingId == "com.apple.screenshot.launcher"
+            || executablePath == "/usr/sbin/screencapture"
+            || executablePath.hasSuffix("/screenshot.app/contents/macos/screenshot")
+    }
+
+    private static func isOCRCompatibleScreenshotPath(_ path: String) -> Bool {
+        let ext = (path as NSString).pathExtension.lowercased()
+        return ["png", "jpg", "jpeg", "heic", "tif", "tiff", "pdf"].contains(ext)
+    }
+
     private func handleMountMessage(
         client: OpaquePointer,
         message: UnsafePointer<es_message_t>,
@@ -620,6 +788,17 @@ public final class EndpointSecurityService: @unchecked Sendable {
             }
         }
 
+        let opticalDecision = policyEngine.evaluateOpticalDiskImageMount(
+            process: process,
+            mountFrom: mountFrom,
+            mountPoint: mountPoint,
+            fsType: fsType,
+            disposition: disposition,
+            isManagedVeloxContainerMount: managedVirtualMountAllowance.allows(
+                process: process,
+                mountPoint: mountPoint
+            )
+        )
         let decision = policyEngine.evaluateMount(
             process: process,
             mountFrom: mountFrom,
@@ -627,6 +806,25 @@ public final class EndpointSecurityService: @unchecked Sendable {
             fsType: fsType,
             disposition: disposition
         )
+
+        // The more restrictive result wins when physical optical media is also
+        // reported as external removable storage. Otherwise use the specific
+        // optical/disk-image result so events are attributed to the right module.
+        if opticalDecision.isCandidate,
+           !opticalDecision.shouldAllowMount || decision.shouldAllowMount {
+            respondToOpticalDiskImageMount(
+                client: client,
+                message: message,
+                process: process,
+                mountFrom: mountFrom,
+                mountPoint: mountPoint,
+                fsType: fsType,
+                decision: opticalDecision,
+                action: "mount",
+                startNs: startNs
+            )
+            return
+        }
 
         let authResult: es_auth_result_t = decision.shouldAllowMount ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY
         let response = es_respond_auth_result(client, message, authResult, false)
@@ -688,6 +886,17 @@ public final class EndpointSecurityService: @unchecked Sendable {
             }
         }
 
+        let opticalDecision = policyEngine.evaluateOpticalDiskImageMount(
+            process: process,
+            mountFrom: mountFrom,
+            mountPoint: mountPoint,
+            fsType: fsType,
+            disposition: disposition,
+            isManagedVeloxContainerMount: managedVirtualMountAllowance.allows(
+                process: process,
+                mountPoint: mountPoint
+            )
+        )
         let decision = policyEngine.evaluateMount(
             process: process,
             mountFrom: mountFrom,
@@ -695,6 +904,22 @@ public final class EndpointSecurityService: @unchecked Sendable {
             fsType: fsType,
             disposition: disposition
         )
+
+        if opticalDecision.isCandidate,
+           !opticalDecision.shouldAllowMount || decision.shouldAllowMount {
+            respondToOpticalDiskImageMount(
+                client: client,
+                message: message,
+                process: process,
+                mountFrom: mountFrom,
+                mountPoint: mountPoint,
+                fsType: fsType,
+                decision: opticalDecision,
+                action: "remount",
+                startNs: startNs
+            )
+            return
+        }
 
         let authResult: es_auth_result_t = decision.shouldAllowMount ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY
         let response = es_respond_auth_result(client, message, authResult, false)
@@ -725,6 +950,60 @@ public final class EndpointSecurityService: @unchecked Sendable {
         logger.logEventAsync(remountExecutionEvent)
         if decision.decisionString == "blocked" {
             notifyBlockedIfHandlerPresent(remountExecutionEvent)
+        }
+    }
+
+    private func respondToOpticalDiskImageMount(
+        client: OpaquePointer,
+        message: UnsafePointer<es_message_t>,
+        process: ProcessContext,
+        mountFrom: String,
+        mountPoint: String,
+        fsType: String,
+        decision: OpticalDiskImageDecision,
+        action: String,
+        startNs: UInt64
+    ) {
+        let response = es_respond_auth_result(
+            client,
+            message,
+            decision.shouldAllowMount ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY,
+            false
+        )
+        let responseStatus = response == ES_RESPOND_RESULT_SUCCESS
+            ? "success"
+            : "failed_code_\(response.rawValue)"
+        let latencyMicros = max(
+            1,
+            UInt64((DispatchTime.now().uptimeNanoseconds - startNs) / 1_000)
+        )
+        let mountKind = decision.mountKind ?? .diskImage
+        let event = ExecutionEvent(
+            module: "optical-disk-image-control",
+            action: "\(mountKind.rawValue)-\(action)",
+            decision: decision.decisionString,
+            ruleId: decision.matchingRuleId,
+            policyVersion: decision.policyVersion,
+            executablePath: process.executablePath,
+            signingId: process.signingId,
+            teamId: process.teamId,
+            pid: process.pid,
+            parentPid: process.parentPid,
+            uid: process.uid,
+            decisionLatencyMicros: latencyMicros,
+            authResponseResult: responseStatus,
+            resourcePath: "\(mountFrom) -> \(mountPoint) (\(fsType))",
+            interaction: mountKind.rawValue
+        )
+        logger.logEventAsync(event)
+        if decision.decisionString == "blocked" && response == ES_RESPOND_RESULT_SUCCESS {
+            notifyBlockedIfHandlerPresent(event)
+        }
+        if response != ES_RESPOND_RESULT_SUCCESS {
+            fputs(
+                "[VeloxEndpointSecurityService] CRITICAL: optical/disk-image mount response failed: \(response.rawValue)\n",
+                stderr
+            )
         }
     }
 

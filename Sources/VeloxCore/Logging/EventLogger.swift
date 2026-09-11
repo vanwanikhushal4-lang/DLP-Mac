@@ -21,6 +21,12 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
     public let requestedOpenFlags: UInt32?
     public let pageURL: String?
     public let interaction: String?
+    public let contentHashPrefix: String?
+    public let fileType: String?
+    public let classifications: [String]?
+    public let recognizedCharacterCount: Int?
+    public let ocrConfidence: Double?
+    public let pageCount: Int?
 
     public init(
         timestamp: String? = nil,
@@ -41,7 +47,13 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
         resourcePath: String? = nil,
         requestedOpenFlags: UInt32? = nil,
         pageURL: String? = nil,
-        interaction: String? = nil
+        interaction: String? = nil,
+        contentHashPrefix: String? = nil,
+        fileType: String? = nil,
+        classifications: [String]? = nil,
+        recognizedCharacterCount: Int? = nil,
+        ocrConfidence: Double? = nil,
+        pageCount: Int? = nil
     ) {
         if let ts = timestamp {
             self.timestamp = ts
@@ -68,6 +80,12 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
         self.requestedOpenFlags = requestedOpenFlags
         self.pageURL = pageURL
         self.interaction = interaction
+        self.contentHashPrefix = contentHashPrefix
+        self.fileType = fileType
+        self.classifications = classifications
+        self.recognizedCharacterCount = recognizedCharacterCount
+        self.ocrConfidence = ocrConfidence
+        self.pageCount = pageCount
     }
 }
 

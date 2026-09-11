@@ -6,7 +6,8 @@ import os.log
 
 /// Manages desktop notifications ("Blocked by Velox DLP") for security events across
 /// Application Control, Web Upload Control, USB Storage Control, nearby transfer,
-/// and Clipboard Control.
+/// Clipboard Control, physical printing, PDF file output, and disk-image or
+/// optical-media mounting.
 /// Delivers both a native AppKit floating HUD banner directly on screen and a macOS
 /// Notification Center system banner via out-of-process dispatch.
 public final class VeloxNotificationManager: NSObject, VeloxClientProtocol, UNUserNotificationCenterDelegate, @unchecked Sendable {
@@ -14,6 +15,8 @@ public final class VeloxNotificationManager: NSObject, VeloxClientProtocol, UNUs
 
     private let logger = Logger(subsystem: "co.velox.macdlp", category: "Notifications")
     private let debouncer = VeloxNotificationDebouncer(interval: 3.0)
+    private let screenshotHandlerLock = NSLock()
+    private var potentialScreenshotHandler: (@Sendable (String) -> Void)?
     private var isAuthorized = false
 
     override private init() {
@@ -68,6 +71,19 @@ public final class VeloxNotificationManager: NSObject, VeloxClientProtocol, UNUs
             target: target,
             detail: detail
         )
+    }
+
+    public func handlePotentialScreenshot(path: String, timestamp: Double) {
+        screenshotHandlerLock.lock()
+        let handler = potentialScreenshotHandler
+        screenshotHandlerLock.unlock()
+        handler?(path)
+    }
+
+    func setPotentialScreenshotHandler(_ handler: (@Sendable (String) -> Void)?) {
+        screenshotHandlerLock.lock()
+        potentialScreenshotHandler = handler
+        screenshotHandlerLock.unlock()
     }
 
     // MARK: - Notification Dispatch & Presentation

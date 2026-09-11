@@ -44,6 +44,25 @@ public struct WebUploadDecision: Sendable, Equatable {
     }
 }
 
+public struct EmailAttachmentDecision: Sendable, Equatable {
+    public let decisionString: String
+    public let shouldAllowOpen: Bool
+    public let isAttachmentCandidate: Bool
+    public let matchingRuleId: String?
+    public let policyVersion: Int
+    public let mailClientName: String?
+    public let classifications: [String]
+    public let contentHashPrefix: String?
+}
+
+public struct PrintToPDFDecision: Sendable, Equatable {
+    public let decisionString: String
+    public let shouldAllowCreate: Bool
+    public let isPDFOutputCandidate: Bool
+    public let matchingRuleId: String?
+    public let policyVersion: Int
+}
+
 public final class PolicyEngine: @unchecked Sendable {
     private let lock = os_unfair_lock_t.allocate(capacity: 1)
     private var activePolicy: VeloxPolicy
@@ -223,6 +242,135 @@ public final class PolicyEngine: @unchecked Sendable {
                 policyVersion: version
             )
         }
+    }
+
+    /// Controls new PDF file output in normal user content folders. macOS does
+    /// not identify whether a PDF create originated from the Print dialog or an
+    /// application's Export command, so the event is intentionally described as
+    /// PDF file output. Browser downloads normally create a partial staging file
+    /// and rename it into place; neither operation is a matching `.pdf` create.
+    /// A browser's direct `.pdf` create remains in scope so Print -> Save as PDF
+    /// cannot bypass this control.
+    public func evaluatePrintToPDFCreate(
+        process: ProcessContext,
+        destinationPath: String
+    ) -> PrintToPDFDecision {
+        os_unfair_lock_lock(lock)
+        let policy = self.activePolicy
+        os_unfair_lock_unlock(lock)
+
+        let version = policy.policyVersion
+        let config = policy.printToPDFControl
+        let isPDF = URL(fileURLWithPath: destinationPath).pathExtension.caseInsensitiveCompare("pdf") == .orderedSame
+        let isProtectedPath = Self.isProtectedUserContentPath(
+            destinationPath,
+            directoryNames: WebUploadControlConfig.defaultProtectedDirectoryNames
+        )
+        let isCritical = SecurityGuardian.isCriticalProcess(
+            signingId: process.signingId,
+            teamId: process.teamId,
+            executablePath: process.executablePath,
+            isPlatformBinary: process.isPlatformBinary,
+            codesigningFlags: process.codesigningFlags
+        )
+
+        guard config.mode != .disabled,
+              config.blockSaveAsPDF,
+              process.pid > 0,
+              !process.executablePath.isEmpty,
+              !isCritical,
+              isPDF,
+              isProtectedPath,
+              !Self.isApplicationOrBundlePath(destinationPath),
+              !Self.isSystemMetadataPath(destinationPath) else {
+            return PrintToPDFDecision(
+                decisionString: "allowed",
+                shouldAllowCreate: true,
+                isPDFOutputCandidate: false,
+                matchingRuleId: nil,
+                policyVersion: version
+            )
+        }
+
+        return PrintToPDFDecision(
+            decisionString: config.mode == .enforce ? "blocked" : "would-block",
+            shouldAllowCreate: config.mode != .enforce,
+            isPDFOutputCandidate: true,
+            matchingRuleId: "print-to-pdf-file-create",
+            policyVersion: version
+        )
+    }
+
+    /// Enforces the scope's endpoint-side email control: a securely identified
+    /// native mail client may not read a fresh, pre-classified file. Endpoint
+    /// Security does not expose recipients or a dependable compose/send event,
+    /// so this decision never claims message-level attribution.
+    public func evaluateEmailAttachmentOpen(
+        process: ProcessContext,
+        filePath: String,
+        requestedFlags: UInt32,
+        isRegularFile: Bool,
+        classification: FileClassificationRecord?
+    ) -> EmailAttachmentDecision {
+        os_unfair_lock_lock(lock)
+        let policy = self.activePolicy
+        os_unfair_lock_unlock(lock)
+
+        let version = policy.policyVersion
+        let config = policy.emailAttachmentControl
+        let readRequested = (requestedFlags & UInt32(FREAD)) != 0
+        let writeRequested = (requestedFlags & UInt32(FWRITE)) != 0
+        let isEventOnly = (requestedFlags & UInt32(O_EVTONLY)) != 0
+
+        guard config.mode != .disabled,
+              isRegularFile,
+              readRequested,
+              !writeRequested,
+              !isEventOnly,
+              !Self.isBrowserPartialDownloadPath(filePath),
+              !Self.isApplicationOrBundlePath(filePath),
+              !Self.isSystemMetadataPath(filePath),
+              let clientRule = config.mailClients.first(where: { matches(rule: $0, process: process) }),
+              let classification else {
+            return EmailAttachmentDecision(
+                decisionString: "allowed",
+                shouldAllowOpen: true,
+                isAttachmentCandidate: false,
+                matchingRuleId: nil,
+                policyVersion: version,
+                mailClientName: nil,
+                classifications: [],
+                contentHashPrefix: nil
+            )
+        }
+
+        let protected = Set(config.protectedClassifications.map { $0.lowercased() })
+        let matchedClassifications = classification.classifications.filter {
+            protected.isEmpty || protected.contains($0.lowercased())
+        }
+        guard !matchedClassifications.isEmpty else {
+            return EmailAttachmentDecision(
+                decisionString: "allowed",
+                shouldAllowOpen: true,
+                isAttachmentCandidate: false,
+                matchingRuleId: nil,
+                policyVersion: version,
+                mailClientName: Self.mailClientName(for: clientRule),
+                classifications: [],
+                contentHashPrefix: nil
+            )
+        }
+
+        return EmailAttachmentDecision(
+            decisionString: config.mode == .enforce ? "blocked" : "would-block",
+            shouldAllowOpen: config.mode != .enforce,
+            isAttachmentCandidate: true,
+            matchingRuleId: clientRule.ruleId,
+            policyVersion: version,
+            mailClientName: Self.mailClientName(for: clientRule),
+            classifications: matchedClassifications,
+            contentHashPrefix: classification.contentHashPrefix
+        )
     }
 
     /// Evaluates outbound file reads made by AirDrop and Bluetooth transfer services.
@@ -518,6 +666,77 @@ public final class PolicyEngine: @unchecked Sendable {
         }
     }
 
+    /// Evaluates virtual file-backed disk-image mounts and optical filesystems.
+    /// Endpoint Security labels DMG/file-backed mounts as VIRTUAL. Optical media
+    /// is additionally recognized by filesystem type because physical discs may
+    /// be reported as EXTERNAL. Internal, network, and nullfs mounts never match.
+    public func evaluateOpticalDiskImageMount(
+        process: ProcessContext,
+        mountFrom: String,
+        mountPoint: String,
+        fsType: String,
+        disposition: es_mount_disposition_t,
+        isManagedVeloxContainerMount: Bool = false
+    ) -> OpticalDiskImageDecision {
+        os_unfair_lock_lock(lock)
+        let policy = self.activePolicy
+        os_unfair_lock_unlock(lock)
+
+        let version = policy.policyVersion
+        let config = policy.opticalDiskImageControl
+        guard config.mode != .disabled else {
+            return OpticalDiskImageDecision(
+                decisionString: "allowed",
+                shouldAllowMount: true,
+                isCandidate: false,
+                matchingRuleId: nil,
+                policyVersion: version,
+                mountKind: nil
+            )
+        }
+
+        let normalizedFileSystem = fsType.lowercased()
+        let opticalFileSystems: Set<String> = ["cd9660", "cddafs", "udf", "udf2"]
+        let kind: OpticalMountKind?
+
+        if disposition == ES_MOUNT_DISPOSITION_VIRTUAL,
+           config.blockDiskImages,
+           !isManagedVeloxContainerMount {
+            kind = .diskImage
+        } else if opticalFileSystems.contains(normalizedFileSystem),
+                  config.blockOpticalMedia,
+                  disposition != ES_MOUNT_DISPOSITION_INTERNAL,
+                  disposition != ES_MOUNT_DISPOSITION_NETWORK,
+                  disposition != ES_MOUNT_DISPOSITION_NULLFS {
+            kind = .opticalMedia
+        } else {
+            kind = nil
+        }
+
+        guard let kind else {
+            return OpticalDiskImageDecision(
+                decisionString: "allowed",
+                shouldAllowMount: true,
+                isCandidate: false,
+                matchingRuleId: nil,
+                policyVersion: version,
+                mountKind: nil
+            )
+        }
+
+        let enforced = config.mode == .enforce
+        return OpticalDiskImageDecision(
+            decisionString: enforced ? "blocked" : "would-block",
+            shouldAllowMount: !enforced,
+            isCandidate: true,
+            matchingRuleId: kind == .diskImage
+                ? "optical-block-disk-image"
+                : "optical-block-media",
+            policyVersion: version,
+            mountKind: kind
+        )
+    }
+
     public static func isSupportedBrowserBundleId(_ bundleId: String) -> Bool {
         let lower = bundleId.lowercased()
         let prefixes = [
@@ -620,6 +839,14 @@ public final class PolicyEngine: @unchecked Sendable {
     private static func isSystemMetadataPath(_ filePath: String) -> Bool {
         let name = URL(fileURLWithPath: filePath).lastPathComponent.lowercased()
         return name == ".ds_store" || name == ".localized" || name.hasPrefix("icon\r")
+    }
+
+    private static func mailClientName(for rule: ApplicationRule) -> String {
+        switch rule.signingId?.lowercased() {
+        case "com.apple.mail": return "Apple Mail"
+        case "com.microsoft.outlook": return "Microsoft Outlook"
+        default: return rule.signingId ?? "Native mail client"
+        }
     }
 
     private func matches(rule: ApplicationRule, process: ProcessContext) -> Bool {

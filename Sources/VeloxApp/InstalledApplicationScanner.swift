@@ -15,7 +15,11 @@ struct InstalledApplication: Codable {
 }
 
 enum InstalledApplicationScanner {
-    static func scan() -> [InstalledApplication] {
+    /// App discovery touches AppKit for icons, so it stays on the main actor. The
+    /// periodic yields keep the WKWebView responsive while a cold signing/icon
+    /// cache is populated on machines with many applications.
+    @MainActor
+    static func scan() async -> [InstalledApplication] {
         let homeApplications = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications").path
         let roots = ["/Applications", "/System/Applications", homeApplications]
         var applicationsByPath: [String: InstalledApplication] = [:]
@@ -27,11 +31,16 @@ enum InstalledApplicationScanner {
                 options: [.skipsHiddenFiles]
             ) else { continue }
 
-            for case let url as URL in enumerator {
+            var processedApplicationCount = 0
+            while let url = enumerator.nextObject() as? URL {
                 guard url.pathExtension.caseInsensitiveCompare("app") == .orderedSame else { continue }
                 enumerator.skipDescendants()
                 guard let app = application(at: url) else { continue }
                 applicationsByPath[app.executablePath] = app
+                processedApplicationCount += 1
+                if processedApplicationCount.isMultiple(of: 4) {
+                    await Task.yield()
+                }
             }
         }
 

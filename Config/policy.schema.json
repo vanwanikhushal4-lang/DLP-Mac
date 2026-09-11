@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "VeloxApplicationControlPolicy",
+  "title": "VeloxMacDLPPolicy",
   "type": "object",
   "required": ["policyVersion", "applicationControl"],
   "additionalProperties": false,
@@ -55,6 +55,31 @@
             "minLength": 1,
             "pattern": "^[^/]+$"
           }
+        }
+      }
+    },
+    "emailAttachmentControl": {
+      "type": "object",
+      "required": ["mode", "mailClients"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"],
+          "description": "Blocks metadata-matched classified file reads by securely identified native mail clients."
+        },
+        "mailClients": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/ApplicationRule" }
+        },
+        "protectedClassifications": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "OCR classifications protected for email. Empty means every active classification.",
+          "items": { "type": "string", "minLength": 1, "maxLength": 256 }
         }
       }
     },
@@ -146,6 +171,133 @@
         }
       }
     },
+    "ocrControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"],
+          "description": "Classifies text extracted from image files and scanned PDFs on device."
+        },
+        "screenshotMode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"],
+          "description": "Classifies screenshots after Apple's signed screenshot tool creates them."
+        },
+        "screenshotRemediation": {
+          "type": "string",
+          "enum": ["quarantine", "delete"]
+        },
+        "recognitionLanguages": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 35,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "minimumConfidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "maxFileSizeMB": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "maxPDFPages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "rules": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/OCRClassificationRule"
+          }
+        }
+      }
+    },
+    "endpointDiscoveryControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"],
+          "description": "Schedules at-rest scans. Enforce mode tags classified files; audit-only reports findings without modifying files."
+        },
+        "scheduleIntervalMinutes": {
+          "type": "integer",
+          "minimum": 15,
+          "maximum": 10080
+        },
+        "includeLocalHome": { "type": "boolean" },
+        "includeMountedVolumes": { "type": "boolean" },
+        "includeMountedShares": { "type": "boolean" },
+        "tagClassifiedFiles": { "type": "boolean" },
+        "maxFilesPerScan": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 100000
+        }
+      }
+    },
+    "cloudSyncControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["enforce", "audit-only", "disabled"] },
+        "blockCloudSync": { "type": "boolean" },
+        "monitoredProviders": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "opticalDiskImageControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["enforce", "audit-only", "disabled"] },
+        "blockDiskImages": {
+          "type": "boolean",
+          "description": "Block or audit virtual file-backed mounts such as DMG, ISO, sparseimage and sparsebundle volumes."
+        },
+        "blockOpticalMedia": {
+          "type": "boolean",
+          "description": "Block or audit CD/DVD optical filesystem mounts such as UDF and ISO 9660."
+        }
+      }
+    },
+    "screenWatermarking": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["enforce", "audit-only", "disabled"] },
+        "text": { "type": "string", "minLength": 1 },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "printToPDFControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "audit-only", "disabled"],
+          "description": "Controls new PDF file output by applications in standard user content folders."
+        },
+        "blockSaveAsPDF": {
+          "type": "boolean",
+          "description": "Deny or audit new PDF creates; partial-file download staging and rename finalization remain outside this authorization path."
+        }
+      }
+    },
     "networkFlowControl": {
       "type": "object",
       "required": ["mode"],
@@ -172,6 +324,28 @@
     }
   },
   "$defs": {
+    "OCRClassificationRule": {
+      "type": "object",
+      "required": ["ruleId", "name", "classification", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "ruleId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "classification": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "type": {
+          "type": "string",
+          "enum": ["keyword", "regular-expression", "credit-card", "indian-pan", "aadhaar"]
+        },
+        "pattern": { "type": ["string", "null"], "maxLength": 512 },
+        "keywords": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "minimumMatches": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
     "NetworkDestinationRule": {
       "type": "object",
       "required": ["ruleId"],

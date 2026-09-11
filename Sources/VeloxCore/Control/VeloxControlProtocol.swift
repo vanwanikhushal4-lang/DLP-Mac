@@ -16,6 +16,11 @@ import Foundation
         withReply reply: @escaping (String) -> Void
     )
 
+    func setEmailAttachmentConfig(
+        _ configJSON: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
     func setUSBStorageMode(
         _ mode: String,
         withReply reply: @escaping (String) -> Void
@@ -37,6 +42,48 @@ import Foundation
     )
 
     func setPrinterMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setOCRMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setScreenshotOCRMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// Replaces the complete Endpoint Data Discovery configuration after the
+    /// extension validates and atomically persists the new policy version.
+    func setEndpointDiscoveryConfig(
+        _ configJSON: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setCloudSyncMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setOpticalDiskImageMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setOpticalDiskImageConfig(
+        _ configJSON: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setScreenWatermarkingMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    func setPrintToPDFMode(
         _ mode: String,
         withReply reply: @escaping (String) -> Void
     )
@@ -83,6 +130,26 @@ import Foundation
         withReply reply: @escaping (String) -> Void
     )
 
+    /// Records a privacy-safe OCR verdict. Extracted text and source file paths
+    /// are forbidden from this payload.
+    func recordOCRScanEvent(
+        _ payloadJSON: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// Records a content-free at-rest discovery finding or scan summary.
+    func recordEndpointDiscoveryEvent(
+        _ payloadJSON: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// Rehydrates the extension's metadata-bound, content-free classification
+    /// cache after activation or restart. The extension validates every record.
+    func syncEndpointDiscoveryClassifications(
+        _ recordsJSON: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
     func setApplicationBlocked(
         signingId: String,
         executablePath: String,
@@ -105,6 +172,13 @@ import Foundation
         action: String,
         target: String,
         detail: String,
+        timestamp: Double
+    )
+
+    /// Signals that Apple's signed screenshot tool created a candidate file.
+    /// OCR runs asynchronously in the logged-in host after the ES response.
+    func handlePotentialScreenshot(
+        path: String,
         timestamp: Double
     )
 }
