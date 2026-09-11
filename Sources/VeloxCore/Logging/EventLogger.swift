@@ -18,6 +18,7 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
     public let decisionLatencyMicros: UInt64
     public let authResponseResult: String?
     public let resourcePath: String?
+    public let destinationPath: String?
     public let requestedOpenFlags: UInt32?
     public let pageURL: String?
     public let interaction: String?
@@ -45,6 +46,7 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
         decisionLatencyMicros: UInt64,
         authResponseResult: String? = nil,
         resourcePath: String? = nil,
+        destinationPath: String? = nil,
         requestedOpenFlags: UInt32? = nil,
         pageURL: String? = nil,
         interaction: String? = nil,
@@ -77,6 +79,7 @@ public struct ExecutionEvent: Codable, Sendable, Equatable {
         self.decisionLatencyMicros = decisionLatencyMicros
         self.authResponseResult = authResponseResult
         self.resourcePath = resourcePath
+        self.destinationPath = destinationPath
         self.requestedOpenFlags = requestedOpenFlags
         self.pageURL = pageURL
         self.interaction = interaction

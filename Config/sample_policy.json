@@ -68,6 +68,9 @@
   },
   "ocrControl": {
     "mode": "enforce",
+    "egressMode": "enforce",
+    "protectedEgressChannels": ["usb", "web-upload", "email", "nearby-transfer"],
+    "protectedEgressClassifications": [],
     "screenshotMode": "audit-only",
     "screenshotRemediation": "quarantine",
     "recognitionLanguages": ["en-US"],

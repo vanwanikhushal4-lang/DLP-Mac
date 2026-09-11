@@ -277,6 +277,7 @@ function App() {
   const [busyPrinter, setBusyPrinter] = useState(false);
   const [busyPrintToPDF, setBusyPrintToPDF] = useState(false);
   const [busyOCR, setBusyOCR] = useState(false);
+  const [busyClassifiedEgress, setBusyClassifiedEgress] = useState(false);
   const [busyScreenshotOCR, setBusyScreenshotOCR] = useState(false);
   const [ocrReport, setOCRReport] = useState(null);
   const [busyDiscovery, setBusyDiscovery] = useState(false);
@@ -623,6 +624,22 @@ function App() {
     }
   }
 
+  async function changeClassifiedEgressMode(mode) {
+    setBusyClassifiedEgress(true);
+    setNotice("");
+    setError("");
+    try {
+      const value = await nativeCall("setClassifiedEgressMode", { mode });
+      setSnapshot(value);
+      setNotice(`Classified-file egress protection is now ${modeCopy[mode].label.toLowerCase()}.`);
+      await refreshEvents();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyClassifiedEgress(false);
+    }
+  }
+
   async function changeScreenshotOCRMode(mode) {
     setBusyScreenshotOCR(true);
     setNotice("");
@@ -845,6 +862,9 @@ function App() {
   const printerQueueCount = snapshot?.printerQueueCount || 0;
   const printerControlledQueueCount = snapshot?.printerControlledQueueCount || 0;
   const ocrMode = snapshot?.ocrMode || "disabled";
+  const classifiedEgressMode = snapshot?.classifiedEgressMode || "disabled";
+  const classifiedEgressChannels = snapshot?.classifiedEgressChannels || ["usb", "web-upload", "email", "nearby-transfer"];
+  const classifiedEgressClassifications = snapshot?.classifiedEgressClassifications || [];
   const screenshotOCRMode = snapshot?.screenshotOCRMode || "disabled";
   const screenshotOCRRemediation = snapshot?.screenshotOCRRemediation || "quarantine";
   const ocrRuleCount = snapshot?.ocrRuleCount || 0;
@@ -932,7 +952,7 @@ function App() {
     nearbyTransferMode === "enforce",
     clipboardMode !== "disabled",
     printerProtectionActive,
-    ocrMode === "enforce" || screenshotOCRMode === "enforce",
+    ocrMode === "enforce" || screenshotOCRMode === "enforce" || classifiedEgressMode === "enforce",
     endpointDiscoveryMode === "enforce",
     networkFlowMode === "enforce" && networkFilterEnabled,
   ].filter(Boolean).length : 0;
@@ -945,7 +965,7 @@ function App() {
     opticalDiskImageMode,
     nearbyTransferMode,
     printerMode === "audit-only" || printToPDFMode === "audit-only" ? "audit-only" : "disabled",
-    ocrMode === "audit-only" || screenshotOCRMode === "audit-only" ? "audit-only" : "disabled",
+    ocrMode === "audit-only" || screenshotOCRMode === "audit-only" || classifiedEgressMode === "audit-only" ? "audit-only" : "disabled",
     endpointDiscoveryMode,
     networkFlowMode,
   ].filter(value => value === "audit-only").length : 0;
@@ -1631,10 +1651,30 @@ function App() {
 
         {activeFeature === "ocr" && <>
           <section className="summary-grid">
-            <article><span className="card-label">DOCUMENT OCR</span><strong>{modeCopy[ocrMode]?.label}</strong><p>Images and scanned PDFs classified locally.</p></article>
+            <article><span className="card-label">CLASSIFIED EGRESS</span><strong>{modeCopy[classifiedEgressMode]?.label}</strong><p>{classifiedEgressChannels.length} outbound channels covered.</p></article>
             <article><span className="card-label">SCREENSHOT OCR</span><strong>{modeCopy[screenshotOCRMode]?.label}</strong><p>Detect-and-remediate after capture.</p></article>
             <article><span className="card-label">CLASSIFICATION RULES</span><strong>{ocrRuleCount}</strong><p>Payment card, PAN, Aadhaar and confidential markers.</p></article>
             <article><span className="card-label">LANGUAGES</span><strong>{ocrRecognitionLanguages.length || 1}</strong><p>{ocrRecognitionLanguages.join(", ") || "en-US"}</p></article>
+          </section>
+
+          <section className="panel mode-panel">
+            <div>
+              <h2>Classified-file egress protection</h2>
+              <p>Make Payment Card Data, Indian Tax Identifier, Indian Identity Data, and Confidential Document files unsharable through USB copy, browser upload, native email, and AirDrop/Bluetooth. An unseen file is held once while on-device classification runs; retrying uses the metadata-bound verdict.</p>
+              <div className="protected-folders" style={{ marginTop: "14px" }}>
+                <span>PROTECTED CHANNELS</span>
+                <strong>{classifiedEgressChannels.map(value => value === "web-upload" ? "Web upload" : value === "nearby-transfer" ? "AirDrop / Bluetooth" : value.charAt(0).toUpperCase() + value.slice(1)).join(" · ")}</strong>
+              </div>
+              <div className="protected-folders" style={{ marginTop: "10px" }}>
+                <span>BLOCKED CLASSIFICATIONS</span>
+                <strong>{classifiedEgressClassifications.join(" · ") || "All active OCR classifications"}</strong>
+              </div>
+            </div>
+            <div className="segmented">
+              {Object.entries(modeCopy).map(([value, copy]) => (
+                <button key={value} className={classifiedEgressMode === value ? "selected" : ""} disabled={busyClassifiedEgress || !online} onClick={() => changeClassifiedEgressMode(value)}>{copy.label}</button>
+              ))}
+            </div>
           </section>
 
           <section className="panel mode-panel">

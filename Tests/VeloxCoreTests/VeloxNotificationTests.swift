@@ -2,6 +2,41 @@ import XCTest
 @testable import VeloxCore
 
 final class VeloxNotificationTests: XCTestCase {
+    func testEgressClassificationFailureNotificationExplainsStrictHold() {
+        let formatted = VeloxNotificationFormatter.format(
+            module: "ocr-content-classification",
+            action: "egress-scan-failed",
+            target: "/Users/alice/Documents/archive.zip",
+            detail: "unsupported-file-type"
+        )
+
+        XCTAssertEqual(formatted.title, "Blocked by Velox DLP")
+        XCTAssertEqual(formatted.subtitle, "File Classification Failed")
+        XCTAssertTrue(formatted.body.contains("archive.zip"))
+        XCTAssertTrue(formatted.body.contains("unsupported file type"))
+    }
+
+    func testClassifiedEgressNotificationsDoNotExposeContent() {
+        let scanning = VeloxNotificationFormatter.format(
+            module: "web-upload-control",
+            action: "classified-content-scan-required",
+            target: "/Users/alice/Documents/id.png",
+            detail: ""
+        )
+        XCTAssertEqual(scanning.subtitle, "File Classification Required")
+        XCTAssertTrue(scanning.body.contains("Retry"))
+
+        let blocked = VeloxNotificationFormatter.format(
+            module: "usb-storage-control",
+            action: "classified-content-copy",
+            target: "/Users/alice/Documents/id.png",
+            detail: "Indian Identity Data"
+        )
+        XCTAssertEqual(blocked.subtitle, "Classified File Transfer Blocked")
+        XCTAssertTrue(blocked.body.contains("Indian Identity Data"))
+        XCTAssertFalse(blocked.body.contains("2345"))
+    }
+
 
     func testApplicationControlNotificationFormatting() {
         let formatted = VeloxNotificationFormatter.format(

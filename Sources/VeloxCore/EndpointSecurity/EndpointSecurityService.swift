@@ -378,6 +378,96 @@ public final class EndpointSecurityService: @unchecked Sendable {
             return
         }
 
+        let cachedClassification = classificationCache.lookup(
+            filePath: filePath,
+            fileSize: Int64(file.stat.st_size),
+            modifiedAtSeconds: Int64(file.stat.st_mtimespec.tv_sec),
+            modifiedAtNanoseconds: Int64(file.stat.st_mtimespec.tv_nsec)
+        )
+        if let egressChannel = policyEngine.classifiedEgressChannelForOpen(
+            process: process,
+            filePath: filePath,
+            requestedFlags: requestedFlags,
+            isRegularFile: isRegularFile
+        ) {
+            let egressDecision = policyEngine.evaluateClassifiedEgress(
+                channel: egressChannel,
+                classification: cachedClassification
+            )
+            let classifiedModule: String
+            switch egressChannel {
+            case .webUpload: classifiedModule = "web-upload-control"
+            case .email: classifiedModule = "email-attachment-control"
+            case .nearbyTransfer: classifiedModule = "nearby-transfer-control"
+            case .usb: classifiedModule = "usb-storage-control"
+            }
+            if egressDecision.matchingRuleId != nil {
+                let responseStatus: String
+                if egressDecision.shouldAllow {
+                    responseStatus = "deferred-to-channel-policy"
+                } else {
+                    let response = es_respond_flags_result(client, message, 0, false)
+                    responseStatus = response == ES_RESPOND_RESULT_SUCCESS
+                        ? "success"
+                        : "failed_code_\(response.rawValue)"
+                }
+                let event = ExecutionEvent(
+                    timestamp: nil,
+                    eventId: UUID().uuidString,
+                    module: classifiedModule,
+                    action: egressDecision.requiresClassification
+                        ? "classified-content-scan-required"
+                        : "classified-content-file-read",
+                    decision: egressDecision.decisionString,
+                    ruleId: egressDecision.matchingRuleId,
+                    policyVersion: egressDecision.policyVersion,
+                    executablePath: process.executablePath,
+                    signingId: process.signingId,
+                    teamId: process.teamId,
+                    pid: process.pid,
+                    parentPid: process.parentPid,
+                    uid: process.uid,
+                    decisionLatencyMicros: max(1, UInt64((DispatchTime.now().uptimeNanoseconds - startNs) / 1_000)),
+                    authResponseResult: responseStatus,
+                    resourcePath: filePath,
+                    requestedOpenFlags: requestedFlags,
+                    interaction: egressChannel.rawValue,
+                    contentHashPrefix: egressDecision.contentHashPrefix,
+                    classifications: egressDecision.classifications
+                )
+                logger.logEventAsync(event)
+                if !egressDecision.shouldAllow {
+                    notifyBlockedIfHandlerPresent(event)
+                    return
+                }
+            } else if egressDecision.isCandidate {
+                // Record the content gate's explicit pass before a potentially
+                // stricter route-wide policy makes its own decision below.
+                logger.logEventAsync(ExecutionEvent(
+                    timestamp: nil,
+                    eventId: UUID().uuidString,
+                    module: classifiedModule,
+                    action: "classified-content-passed",
+                    decision: "allowed",
+                    ruleId: nil,
+                    policyVersion: egressDecision.policyVersion,
+                    executablePath: process.executablePath,
+                    signingId: process.signingId,
+                    teamId: process.teamId,
+                    pid: process.pid,
+                    parentPid: process.parentPid,
+                    uid: process.uid,
+                    decisionLatencyMicros: max(1, UInt64((DispatchTime.now().uptimeNanoseconds - startNs) / 1_000)),
+                    authResponseResult: "deferred-to-channel-policy",
+                    resourcePath: filePath,
+                    requestedOpenFlags: requestedFlags,
+                    interaction: egressChannel.rawValue,
+                    contentHashPrefix: egressDecision.contentHashPrefix,
+                    classifications: []
+                ))
+            }
+        }
+
         let nearbyDecision = policyEngine.evaluateNearbyTransferOpen(
             process: process,
             filePath: filePath,
@@ -427,12 +517,6 @@ public final class EndpointSecurityService: @unchecked Sendable {
             return
         }
 
-        let cachedClassification = classificationCache.lookup(
-            filePath: filePath,
-            fileSize: Int64(file.stat.st_size),
-            modifiedAtSeconds: Int64(file.stat.st_mtimespec.tv_sec),
-            modifiedAtNanoseconds: Int64(file.stat.st_mtimespec.tv_nsec)
-        )
         let emailDecision = policyEngine.evaluateEmailAttachmentOpen(
             process: process,
             filePath: filePath,
@@ -655,6 +739,86 @@ public final class EndpointSecurityService: @unchecked Sendable {
         }
 
         let process = extractProcessContext(target: msg.process.pointee)
+        if let volume = usbEncryptionAccessController.externalVolume(containing: destinationPath) {
+            let source = copy.source.pointee
+            let sourcePath = stringFromToken(source.path) ?? ""
+            let sourceType = source.stat.st_mode & mode_t(S_IFMT)
+            if sourceType == mode_t(S_IFREG), !sourcePath.isEmpty {
+                let cachedClassification = classificationCache.lookup(
+                    filePath: sourcePath,
+                    fileSize: Int64(source.stat.st_size),
+                    modifiedAtSeconds: Int64(source.stat.st_mtimespec.tv_sec),
+                    modifiedAtNanoseconds: Int64(source.stat.st_mtimespec.tv_nsec)
+                )
+                let egressDecision = policyEngine.evaluateClassifiedEgress(
+                    channel: .usb,
+                    classification: cachedClassification
+                )
+                if egressDecision.matchingRuleId != nil {
+                    let responseStatus: String
+                    if egressDecision.shouldAllow {
+                        responseStatus = "deferred-to-usb-policy"
+                    } else {
+                        let response = es_respond_auth_result(client, message, ES_AUTH_RESULT_DENY, false)
+                        responseStatus = response == ES_RESPOND_RESULT_SUCCESS
+                            ? "success"
+                            : "failed_code_\(response.rawValue)"
+                    }
+                    let event = ExecutionEvent(
+                        timestamp: nil,
+                        eventId: UUID().uuidString,
+                        module: "usb-storage-control",
+                        action: egressDecision.requiresClassification
+                            ? "classified-content-scan-required"
+                            : "classified-content-copy",
+                        decision: egressDecision.decisionString,
+                        ruleId: egressDecision.matchingRuleId,
+                        policyVersion: egressDecision.policyVersion,
+                        executablePath: process.executablePath,
+                        signingId: process.signingId,
+                        teamId: process.teamId,
+                        pid: process.pid,
+                        parentPid: process.parentPid,
+                        uid: process.uid,
+                        decisionLatencyMicros: max(1, UInt64((DispatchTime.now().uptimeNanoseconds - startNs) / 1_000)),
+                        authResponseResult: responseStatus,
+                        resourcePath: sourcePath,
+                        destinationPath: destinationPath,
+                        interaction: "usb:\(volume.volumeName)",
+                        contentHashPrefix: egressDecision.contentHashPrefix,
+                        classifications: egressDecision.classifications
+                    )
+                    logger.logEventAsync(event)
+                    if !egressDecision.shouldAllow {
+                        notifyBlockedIfHandlerPresent(event)
+                        return
+                    }
+                } else if egressDecision.isCandidate {
+                    logger.logEventAsync(ExecutionEvent(
+                        timestamp: nil,
+                        eventId: UUID().uuidString,
+                        module: "usb-storage-control",
+                        action: "classified-content-passed",
+                        decision: "allowed",
+                        ruleId: nil,
+                        policyVersion: egressDecision.policyVersion,
+                        executablePath: process.executablePath,
+                        signingId: process.signingId,
+                        teamId: process.teamId,
+                        pid: process.pid,
+                        parentPid: process.parentPid,
+                        uid: process.uid,
+                        decisionLatencyMicros: max(1, UInt64((DispatchTime.now().uptimeNanoseconds - startNs) / 1_000)),
+                        authResponseResult: "deferred-to-usb-policy",
+                        resourcePath: sourcePath,
+                        destinationPath: destinationPath,
+                        interaction: "usb:\(volume.volumeName)",
+                        contentHashPrefix: egressDecision.contentHashPrefix,
+                        classifications: []
+                    ))
+                }
+            }
+        }
         guard let decision = usbEncryptionAccessController.evaluateMutation(
             process: process,
             destinationPath: destinationPath,

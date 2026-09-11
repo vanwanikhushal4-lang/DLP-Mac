@@ -18,9 +18,14 @@ public final class VeloxActiveEventMonitor: @unchecked Sendable {
     private var remainderBuffer: String = ""
     private var isRunning = false
     private let decoder = JSONDecoder()
+    private let onClassificationNeeded: (@Sendable (String) -> Void)?
 
-    public init(logPath: String = EventLogger.defaultLogPath) {
+    public init(
+        logPath: String = EventLogger.defaultLogPath,
+        onClassificationNeeded: (@Sendable (String) -> Void)? = nil
+    ) {
         self.logPath = logPath
+        self.onClassificationNeeded = onClassificationNeeded
     }
 
     deinit {
@@ -164,13 +169,22 @@ public final class VeloxActiveEventMonitor: @unchecked Sendable {
             ConsoleController.current?.broadcastLiveEvent(event)
         }
 
+        if event.ruleId == "content-egress-classification-required",
+           let path = event.resourcePath,
+           path.hasPrefix("/") {
+            onClassificationNeeded?(path)
+        }
+
         // 2. If blocked, immediately trigger the native macOS Notification Center alert
         if event.decision == "blocked" {
             let target = event.resourcePath ?? event.executablePath
             let detail: String
-            if event.module == "network-flow-control" {
+            if event.action == "egress-scan-failed" {
+                detail = event.authResponseResult ?? "analysis-error"
+            } else if event.module == "network-flow-control" {
                 detail = event.executablePath
-            } else if event.module == "ocr-content-classification" {
+            } else if event.module == "ocr-content-classification" ||
+                        event.action.hasPrefix("classified-content-") {
                 detail = event.classifications?.joined(separator: ", ") ?? ""
             } else {
                 detail = event.signingId ?? event.teamId ?? ""

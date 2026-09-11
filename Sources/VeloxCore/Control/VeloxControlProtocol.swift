@@ -51,6 +51,11 @@ import Foundation
         withReply reply: @escaping (String) -> Void
     )
 
+    func setClassifiedEgressMode(
+        _ mode: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
     func setScreenshotOCRMode(
         _ mode: String,
         withReply reply: @escaping (String) -> Void
@@ -134,6 +139,14 @@ import Foundation
     /// are forbidden from this payload.
     func recordOCRScanEvent(
         _ payloadJSON: String,
+        withReply reply: @escaping (String) -> Void
+    )
+
+    /// Records a privacy-safe asynchronous egress-classification failure so
+    /// operators can distinguish policy denial from unreadable/unsupported data.
+    func recordEgressClassificationFailure(
+        filePath: String,
+        reasonCode: String,
         withReply reply: @escaping (String) -> Void
     )
 

@@ -65,6 +65,12 @@ final class ExtensionControlClient: @unchecked Sendable {
         }
     }
 
+    func setClassifiedEgressMode(_ mode: String, completion: @escaping (String) -> Void) {
+        withProxy(completion: completion) { proxy in
+            proxy.setClassifiedEgressMode(mode, withReply: completion)
+        }
+    }
+
     func setScreenshotOCRMode(_ mode: String, completion: @escaping (String) -> Void) {
         withProxy(completion: completion) { proxy in
             proxy.setScreenshotOCRMode(mode, withReply: completion)
@@ -164,6 +170,20 @@ final class ExtensionControlClient: @unchecked Sendable {
     func recordOCRScanEvent(_ payloadJSON: String, completion: @escaping (String) -> Void) {
         withProxy(completion: completion) { proxy in
             proxy.recordOCRScanEvent(payloadJSON, withReply: completion)
+        }
+    }
+
+    func recordEgressClassificationFailure(
+        filePath: String,
+        reasonCode: String,
+        completion: @escaping (String) -> Void
+    ) {
+        withProxy(completion: completion) { proxy in
+            proxy.recordEgressClassificationFailure(
+                filePath: filePath,
+                reasonCode: reasonCode,
+                withReply: completion
+            )
         }
     }
 

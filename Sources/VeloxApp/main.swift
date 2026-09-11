@@ -4,6 +4,10 @@ import Darwin
 
 let args = ProcessInfo.processInfo.arguments
 
+if args.contains("--live-logs") {
+    exit(VeloxLiveLogCommand.run(arguments: args))
+}
+
 if args.contains("--status") {
     // 1. Verify system extension registration directly via systemextensionsctl
     let pipe = Pipe()

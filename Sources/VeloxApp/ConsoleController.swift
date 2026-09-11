@@ -196,6 +196,15 @@ final class ConsoleController: NSObject, WKScriptMessageHandler, WKNavigationDel
                 self?.deliver(requestId: requestId, json: json)
             }
 
+        case "setClassifiedEgressMode":
+            guard let mode = body["mode"] as? String else {
+                deliverError(requestId: requestId, message: "Missing classified-egress policy mode.")
+                return
+            }
+            controlClient.setClassifiedEgressMode(mode) { [weak self] json in
+                self?.deliver(requestId: requestId, json: json)
+            }
+
         case "setScreenshotOCRMode":
             guard let mode = body["mode"] as? String else {
                 deliverError(requestId: requestId, message: "Missing screenshot OCR mode.")

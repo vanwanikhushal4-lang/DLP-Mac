@@ -34,7 +34,9 @@ final class EventLoggerTests: XCTestCase {
             pid: 1234,
             parentPid: 1200,
             uid: 501,
-            decisionLatencyMicros: 450
+            decisionLatencyMicros: 450,
+            resourcePath: "/Users/alice/Documents/report.pdf",
+            destinationPath: "/Volumes/CLIENT_USB/report.pdf"
         )
 
         logger.logEventSync(event)
@@ -59,6 +61,8 @@ final class EventLoggerTests: XCTestCase {
         XCTAssertEqual(parsed["parentPid"] as? Int, 1200)
         XCTAssertEqual(parsed["uid"] as? Int, 501)
         XCTAssertEqual(parsed["decisionLatencyMicros"] as? Int, 450)
+        XCTAssertEqual(parsed["resourcePath"] as? String, "/Users/alice/Documents/report.pdf")
+        XCTAssertEqual(parsed["destinationPath"] as? String, "/Volumes/CLIENT_USB/report.pdf")
     }
 
     func testOneHundredConsecutiveConcurrentLogWrites() throws {

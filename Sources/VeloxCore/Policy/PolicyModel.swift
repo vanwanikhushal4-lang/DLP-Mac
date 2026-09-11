@@ -579,6 +579,13 @@ public struct OCRClassificationRule: Codable, Sendable, Equatable {
     }
 }
 
+public enum ClassifiedEgressChannel: String, Codable, CaseIterable, Sendable {
+    case usb
+    case webUpload = "web-upload"
+    case email
+    case nearbyTransfer = "nearby-transfer"
+}
+
 public struct OCRControlConfig: Codable, Sendable, Equatable {
     public static let defaultRules: [OCRClassificationRule] = [
         OCRClassificationRule(
@@ -609,6 +616,12 @@ public struct OCRControlConfig: Codable, Sendable, Equatable {
     ]
 
     public let mode: PolicyMode
+    /// Applies the active OCR classifications to outbound file-transfer paths.
+    /// Unknown files are denied in enforce mode and classified asynchronously.
+    public let egressMode: PolicyMode
+    public let protectedEgressChannels: [ClassifiedEgressChannel]
+    /// Empty means every classification produced by an active OCR rule.
+    public let protectedEgressClassifications: [String]
     public let screenshotMode: PolicyMode
     public let screenshotRemediation: OCRScreenshotRemediation
     public let recognitionLanguages: [String]
@@ -619,6 +632,9 @@ public struct OCRControlConfig: Codable, Sendable, Equatable {
 
     public init(
         mode: PolicyMode = .disabled,
+        egressMode: PolicyMode = .disabled,
+        protectedEgressChannels: [ClassifiedEgressChannel] = ClassifiedEgressChannel.allCases,
+        protectedEgressClassifications: [String] = [],
         screenshotMode: PolicyMode = .disabled,
         screenshotRemediation: OCRScreenshotRemediation = .quarantine,
         recognitionLanguages: [String] = ["en-US"],
@@ -628,6 +644,9 @@ public struct OCRControlConfig: Codable, Sendable, Equatable {
         rules: [OCRClassificationRule] = OCRControlConfig.defaultRules
     ) {
         self.mode = mode
+        self.egressMode = egressMode
+        self.protectedEgressChannels = protectedEgressChannels
+        self.protectedEgressClassifications = protectedEgressClassifications
         self.screenshotMode = screenshotMode
         self.screenshotRemediation = screenshotRemediation
         self.recognitionLanguages = recognitionLanguages
@@ -640,6 +659,18 @@ public struct OCRControlConfig: Codable, Sendable, Equatable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.mode = try container.decodeIfPresent(PolicyMode.self, forKey: .mode) ?? .disabled
+        self.egressMode = try container.decodeIfPresent(
+            PolicyMode.self,
+            forKey: .egressMode
+        ) ?? .disabled
+        self.protectedEgressChannels = try container.decodeIfPresent(
+            [ClassifiedEgressChannel].self,
+            forKey: .protectedEgressChannels
+        ) ?? ClassifiedEgressChannel.allCases
+        self.protectedEgressClassifications = try container.decodeIfPresent(
+            [String].self,
+            forKey: .protectedEgressClassifications
+        ) ?? []
         self.screenshotMode = try container.decodeIfPresent(
             PolicyMode.self,
             forKey: .screenshotMode
@@ -671,6 +702,28 @@ public struct OCRControlConfig: Codable, Sendable, Equatable {
     }
 
     public func validate() throws {
+        guard !protectedEgressChannels.isEmpty,
+              protectedEgressChannels.count <= ClassifiedEgressChannel.allCases.count,
+              Set(protectedEgressChannels.map(\.rawValue)).count == protectedEgressChannels.count else {
+            throw PolicyValidationError.invalidCriterion(
+                "ocrControl.protectedEgressChannels must contain unique supported channels"
+            )
+        }
+        guard protectedEgressClassifications.count <= 100 else {
+            throw PolicyValidationError.invalidCriterion(
+                "ocrControl.protectedEgressClassifications cannot contain more than 100 values"
+            )
+        }
+        var seenEgressClassifications = Set<String>()
+        for classification in protectedEgressClassifications {
+            let trimmed = classification.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, trimmed.count <= 256,
+                  seenEgressClassifications.insert(trimmed.lowercased()).inserted else {
+                throw PolicyValidationError.invalidCriterion(
+                    "ocrControl contains an invalid or duplicate protected egress classification"
+                )
+            }
+        }
         guard (0...1).contains(minimumConfidence) else {
             throw PolicyValidationError.invalidCriterion(
                 "ocrControl.minimumConfidence must be between 0 and 1"
@@ -1362,7 +1415,8 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
 
         if let ocrObj = jsonObject["ocrControl"] as? [String: Any] {
             let validOCRKeys: Set<String> = [
-                "mode", "screenshotMode", "screenshotRemediation",
+                "mode", "egressMode", "protectedEgressChannels",
+                "protectedEgressClassifications", "screenshotMode", "screenshotRemediation",
                 "recognitionLanguages", "minimumConfidence", "maxFileSizeMB",
                 "maxPDFPages", "rules"
             ]
@@ -1472,6 +1526,13 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         try opticalDiskImageControl.validate()
 
         let activeClassifications = Set(ocrControl.rules.map { $0.classification.lowercased() })
+        for classification in ocrControl.protectedEgressClassifications {
+            guard activeClassifications.contains(classification.lowercased()) else {
+                throw PolicyValidationError.invalidCriterion(
+                    "Egress classification '\(classification)' has no active OCR rule"
+                )
+            }
+        }
         for classification in emailAttachmentControl.protectedClassifications {
             guard activeClassifications.contains(classification.lowercased()) else {
                 throw PolicyValidationError.invalidCriterion(

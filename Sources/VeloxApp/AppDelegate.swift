@@ -55,6 +55,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
     private var ocrService: OCRService?
     private var screenshotOCRMonitor: ScreenshotOCRMonitor?
     private var endpointDiscoveryService: EndpointDiscoveryService?
+    private var egressClassificationCoordinator: EgressClassificationCoordinator?
     private enum ExtensionRequestOperation {
         case activation
         case deactivation
@@ -113,7 +114,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, OSSystemExtensi
             self.pasteboardMonitor = monitor
             monitor.start()
 
-            let activeMonitor = VeloxActiveEventMonitor()
+            let egressCoordinator = EgressClassificationCoordinator(
+                ocrService: ocrService,
+                controlClient: controlClient
+            )
+            self.egressClassificationCoordinator = egressCoordinator
+            let activeMonitor = VeloxActiveEventMonitor(
+                onClassificationNeeded: { [weak egressCoordinator] path in
+                    egressCoordinator?.processCandidate(path: path)
+                }
+            )
             self.activeEventMonitor = activeMonitor
             activeMonitor.start()
 

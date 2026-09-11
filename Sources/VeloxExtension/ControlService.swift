@@ -37,6 +37,9 @@ private struct ControlSnapshot: Codable {
     let printerControlledQueueCount: Int
     let printerLastError: String?
     let ocrMode: String
+    let classifiedEgressMode: String
+    let classifiedEgressChannels: [String]
+    let classifiedEgressClassifications: [String]
     let screenshotOCRMode: String
     let screenshotOCRRemediation: String
     let ocrRuleCount: Int
@@ -294,7 +297,11 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
         let action = event.action
         let target = event.resourcePath ?? event.executablePath
         let detail: String
-        if event.module == "clipboard-control" {
+        if event.action == "egress-scan-failed" {
+            detail = event.authResponseResult ?? "analysis-error"
+        } else if event.action.hasPrefix("classified-content-") {
+            detail = event.classifications?.joined(separator: ", ") ?? ""
+        } else if event.module == "clipboard-control" {
             detail = event.pageURL ?? event.signingId ?? "Application"
         } else if event.module == "ocr-content-classification" {
             detail = event.classifications?.joined(separator: ", ") ?? ""
@@ -623,11 +630,15 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
     }
 
     func setOCRMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
-        mutateOCRConfig(mode: mode, updatesScreenshotMode: false, reply: reply)
+        mutateOCRConfig(mode: mode, updatesScreenshotMode: false, updatesEgressMode: false, reply: reply)
+    }
+
+    func setClassifiedEgressMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
+        mutateOCRConfig(mode: mode, updatesScreenshotMode: false, updatesEgressMode: true, reply: reply)
     }
 
     func setScreenshotOCRMode(_ mode: String, withReply reply: @escaping (String) -> Void) {
-        mutateOCRConfig(mode: mode, updatesScreenshotMode: true, reply: reply)
+        mutateOCRConfig(mode: mode, updatesScreenshotMode: true, updatesEgressMode: false, reply: reply)
     }
 
     func setEndpointDiscoveryConfig(_ configJSON: String, withReply reply: @escaping (String) -> Void) {
@@ -680,6 +691,7 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
     private func mutateOCRConfig(
         mode: String,
         updatesScreenshotMode: Bool,
+        updatesEgressMode: Bool,
         reply: @escaping (String) -> Void
     ) {
         mutationLock.lock()
@@ -701,7 +713,10 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             clipboardControl: current.clipboardControl,
             printerControl: current.printerControl,
             ocrControl: OCRControlConfig(
-                mode: updatesScreenshotMode ? ocr.mode : requestedMode,
+                mode: updatesScreenshotMode || updatesEgressMode ? ocr.mode : requestedMode,
+                egressMode: updatesEgressMode ? requestedMode : ocr.egressMode,
+                protectedEgressChannels: ocr.protectedEgressChannels,
+                protectedEgressClassifications: ocr.protectedEgressClassifications,
                 screenshotMode: updatesScreenshotMode ? requestedMode : ocr.screenshotMode,
                 screenshotRemediation: ocr.screenshotRemediation,
                 recognitionLanguages: ocr.recognitionLanguages,
@@ -1250,7 +1265,9 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
 
         let validSources = Set(["manual", "screenshot", "discovery", "egress"])
         let validDecisions = Set(["allowed", "would-block", "blocked"])
-        let validRemediations = Set(["none", "quarantined", "deleted", "remediation-failed"])
+        let validRemediations = Set([
+            "none", "quarantined", "deleted", "remediation-failed", "cached-for-egress"
+        ])
         guard validSources.contains(attempt.source),
               validDecisions.contains(attempt.decision),
               validRemediations.contains(attempt.remediation),
@@ -1290,9 +1307,12 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             reply(errorJSON("OCR event references a rule outside the active policy."))
             return
         }
-        let expectedMode = attempt.source == "screenshot"
-            ? policy.ocrControl.screenshotMode
-            : policy.ocrControl.mode
+        let expectedMode: PolicyMode
+        switch attempt.source {
+        case "screenshot": expectedMode = policy.ocrControl.screenshotMode
+        case "egress": expectedMode = policy.ocrControl.egressMode
+        default: expectedMode = policy.ocrControl.mode
+        }
         let expectedDecision: String
         if ruleIds.isEmpty || expectedMode == .disabled {
             expectedDecision = "allowed"
@@ -1331,6 +1351,63 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
         )
         eventLogger.logEventSync(event)
         if expectedDecision == "blocked" {
+            broadcastBlockedEvent(event)
+        }
+        reply(#"{"ok":true}"#)
+    }
+
+    func recordEgressClassificationFailure(
+        filePath: String,
+        reasonCode: String,
+        withReply reply: @escaping (String) -> Void
+    ) {
+        let supportedReasons: Set<String> = [
+            "file-inaccessible",
+            "unsupported-file-type",
+            "file-too-large",
+            "pdf-page-limit-exceeded",
+            "image-unreadable",
+            "pdf-unreadable",
+            "no-recognizable-content",
+            "file-changed-during-scan",
+            "policy-unavailable",
+            "cache-sync-rejected",
+            "analysis-error"
+        ]
+        let normalizedPath = (filePath as NSString).standardizingPath
+        guard normalizedPath.hasPrefix("/"),
+              normalizedPath.count <= 4_096,
+              supportedReasons.contains(reasonCode) else {
+            reply(errorJSON("Invalid egress-classification failure metadata."))
+            return
+        }
+
+        let policy = policyManager.policyEngine.currentPolicy()
+        let decision: String
+        switch policy.ocrControl.egressMode {
+        case .enforce: decision = "blocked"
+        case .auditOnly: decision = "would-block"
+        case .disabled: decision = "allowed"
+        }
+        let event = ExecutionEvent(
+            module: "ocr-content-classification",
+            action: "egress-scan-failed",
+            decision: decision,
+            ruleId: decision == "allowed" ? nil : "content-egress-classification-failed",
+            policyVersion: policy.policyVersion,
+            executablePath: "/Applications/VeloxMacDLP.app/Contents/MacOS/VeloxMacDLP",
+            signingId: VeloxControlConstants.hostBundleIdentifier,
+            teamId: VeloxControlConstants.teamIdentifier,
+            pid: 0,
+            parentPid: 0,
+            uid: 0,
+            decisionLatencyMicros: 1,
+            authResponseResult: reasonCode,
+            resourcePath: normalizedPath,
+            interaction: "classification-error"
+        )
+        eventLogger.logEventSync(event)
+        if decision == "blocked" {
             broadcastBlockedEvent(event)
         }
         reply(#"{"ok":true}"#)
@@ -1496,7 +1573,8 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                 record.fileSize >= 0 && record.modifiedAtSeconds >= 0 &&
                 (0..<1_000_000_000).contains(record.modifiedAtNanoseconds) &&
                 record.contentHashPrefix.count == 12 && record.contentHashPrefix.allSatisfy(\.isHexDigit) &&
-                !record.ruleIds.isEmpty && record.ruleIds.count <= 100 &&
+                record.policyVersion == policy.policyVersion &&
+                record.ruleIds.count <= 100 &&
                 record.ruleIds.count == record.classifications.count &&
                 zip(record.ruleIds, record.classifications).allSatisfy { ruleId, classification in
                     configuredRules[ruleId] == classification
@@ -1703,6 +1781,11 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                 printerControlledQueueCount: printer.controlledQueueCount,
                 printerLastError: printer.lastError,
                 ocrMode: policy.ocrControl.mode.rawValue,
+                classifiedEgressMode: policy.ocrControl.egressMode.rawValue,
+                classifiedEgressChannels: policy.ocrControl.protectedEgressChannels.map(\.rawValue),
+                classifiedEgressClassifications: policy.ocrControl.protectedEgressClassifications.isEmpty
+                    ? policy.ocrControl.rules.map(\.classification)
+                    : policy.ocrControl.protectedEgressClassifications,
                 screenshotOCRMode: policy.ocrControl.screenshotMode.rawValue,
                 screenshotOCRRemediation: policy.ocrControl.screenshotRemediation.rawValue,
                 ocrRuleCount: policy.ocrControl.rules.count,

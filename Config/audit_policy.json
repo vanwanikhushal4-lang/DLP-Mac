@@ -59,6 +59,9 @@
     "blockSaveAsPDF": true
   },
   "ocrControl": {
+    "egressMode": "audit-only",
+    "protectedEgressChannels": ["usb", "web-upload", "email", "nearby-transfer"],
+    "protectedEgressClassifications": [],
     "mode": "audit-only",
     "screenshotMode": "audit-only",
     "screenshotRemediation": "quarantine",

@@ -110,6 +110,19 @@ public final class USBEncryptionAccessController: @unchecked Sendable {
         )
     }
 
+    /// Returns the physical removable volume containing a destination. Volume
+    /// discovery runs regardless of encrypted-container mode, allowing the
+    /// shared content policy to protect ordinary USB copies as well.
+    public func externalVolume(containing destinationPath: String) -> ManagedUSBEncryptionVolume? {
+        lock.lock()
+        let volumes = state.volumes
+        lock.unlock()
+        let standardizedPath = (destinationPath as NSString).standardizingPath
+        return volumes.first(where: {
+            Self.contains(path: standardizedPath, root: $0.mountPath)
+        })
+    }
+
     public func evaluateMutation(
         process: ProcessContext,
         destinationPath: String,

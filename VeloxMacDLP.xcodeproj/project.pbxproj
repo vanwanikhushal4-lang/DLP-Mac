@@ -25,6 +25,7 @@
 		3B6AD40F8ABBBFB4B1A25001 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 40F66F3895B25267A205A8A6 /* content.js */; };
 		3BDA3AEDFE6118CB0786BD99 /* VeloxNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 707C242EEB12AB3055A0D43D /* VeloxNotificationManager.swift */; };
 		3BE50D23E7105248E5E72E6C /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 1DC3317C04068BC834979BBC /* manifest.json */; };
+		3D9175F02DF166CD58A6D3B8 /* ClassifiedEgressDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400938AC0A29147A49A74293 /* ClassifiedEgressDecision.swift */; };
 		421186E04404DD24CA65D2F8 /* ExtensionControlClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08CD7BEF1DC8E25506C7A63 /* ExtensionControlClient.swift */; };
 		42E9BF9B4BDFBF58D6133D9F /* VeloxNotificationFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB52C31363C7545F4CFBCC13 /* VeloxNotificationFormatter.swift */; };
 		47BCAEF25BCF314F83DD9E68 /* ManagedVirtualMountAllowance.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC430FE867CF42E31120AFBD /* ManagedVirtualMountAllowance.swift */; };
@@ -54,6 +55,7 @@
 		87854BEE6670D5148458AA2B /* VeloxNetworkFilter.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 4D6346A0A5AD713836386EC5 /* VeloxNetworkFilter.systemextension */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		878FF151CE37960CFDB91A8F /* OCRServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C9DEADFDB02CC64D2389E7 /* OCRServiceTests.swift */; };
 		87D7600ACE00C3931FA9B89C /* USBEncryptionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E833D072235A4C1A0126AF /* USBEncryptionCoordinator.swift */; };
+		8B3075D817F89E354DCC0E12 /* EgressClassificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3722203CD63440017EA5E5 /* EgressClassificationCoordinator.swift */; };
 		921147591CB5C2DE21D84FC2 /* BundledWebSchemeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58587F3DE67C667C45F46A7 /* BundledWebSchemeHandler.swift */; };
 		932CFBA95C3F752D573FC8A2 /* libVeloxCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82882244835FE33A8714983D /* libVeloxCore.a */; };
 		99343249A49421511AAF7834 /* libVeloxCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82882244835FE33A8714983D /* libVeloxCore.a */; };
@@ -66,9 +68,11 @@
 		B56E8E4DE79C2610E7CFF742 /* PolicyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC11271361CC6422FC3471BA /* PolicyManagerTests.swift */; };
 		B6902E465B99A64A05F0408F /* NetworkFlowDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 789B97F45570C560562F0BFD /* NetworkFlowDecision.swift */; };
 		B72ECA1B0D6DE4A6A4FF1E8C /* OCRClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7B994689299B77893A20D3 /* OCRClassifier.swift */; };
+		B774FC8FA88C124D9A964B4E /* VeloxLiveLogCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CCA710012A91E1F6741C7D /* VeloxLiveLogCommand.swift */; };
 		B911D3AFABB29BEDC8032BD6 /* EndpointDiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F74E68E1173BFCE49C53BCF /* EndpointDiscoveryService.swift */; };
 		B9D72634EE601330AB924B67 /* EventLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D567B51591F3CFA2405621 /* EventLoggerTests.swift */; };
 		BBCC7BDDE9F84CC6D73ABC6A /* PrinterControlCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F736FC5BC1448530FA696FA /* PrinterControlCoordinator.swift */; };
+		BD9D6EEBC34879F72AC1DFC1 /* ClassifiedEgressControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AEFB3A17AF3CF9AE3D78033 /* ClassifiedEgressControlTests.swift */; };
 		C5C2270921B79A0F1CB43030 /* EmailAttachmentControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FAD55C88FA4CA581759750C /* EmailAttachmentControlTests.swift */; };
 		D5E4E8D35CF7AA6810C9A2FC /* ExternalUSBVolumeParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82306BC561FB19C2E31672B6 /* ExternalUSBVolumeParser.swift */; };
 		D5E90D876730FE2D32C483BF /* SecurityGuardianTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2950E1340C2F09426D65D40D /* SecurityGuardianTests.swift */; };
@@ -176,6 +180,7 @@
 		11D567B51591F3CFA2405621 /* EventLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLoggerTests.swift; sourceTree = "<group>"; };
 		1254D68A51726F1D6EE581FE /* OpticalDiskImageDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpticalDiskImageDecision.swift; sourceTree = "<group>"; };
 		173262F008953ABB94AFF2D9 /* PrinterQueueParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterQueueParser.swift; sourceTree = "<group>"; };
+		1AEFB3A17AF3CF9AE3D78033 /* ClassifiedEgressControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassifiedEgressControlTests.swift; sourceTree = "<group>"; };
 		1DC3317C04068BC834979BBC /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		231CCD8D825D187ED70A36EC /* SecurityGuardian.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityGuardian.swift; sourceTree = "<group>"; };
 		266D16FF787B8DEF8EDF9C43 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = background.js; sourceTree = "<group>"; };
@@ -186,7 +191,9 @@
 		346F085B281B7B42CD90E5A4 /* ScreenshotOCRMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotOCRMonitor.swift; sourceTree = "<group>"; };
 		386684B8DC0C80AC4019DF69 /* OpticalDiskImageControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpticalDiskImageControlTests.swift; sourceTree = "<group>"; };
 		3E6281042EA56E02C2E77C5C /* SafariUploadGuardControlClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariUploadGuardControlClient.swift; sourceTree = "<group>"; };
+		400938AC0A29147A49A74293 /* ClassifiedEgressDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassifiedEgressDecision.swift; sourceTree = "<group>"; };
 		40F66F3895B25267A205A8A6 /* content.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = content.js; sourceTree = "<group>"; };
+		46CCA710012A91E1F6741C7D /* VeloxLiveLogCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VeloxLiveLogCommand.swift; sourceTree = "<group>"; };
 		4D6346A0A5AD713836386EC5 /* VeloxNetworkFilter.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = VeloxNetworkFilter.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		4F74E68E1173BFCE49C53BCF /* EndpointDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndpointDiscoveryService.swift; sourceTree = "<group>"; };
 		5021B8C4C7525A5F69AD843E /* USBEncryptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = USBEncryptionTests.swift; sourceTree = "<group>"; };
@@ -200,6 +207,7 @@
 		707C242EEB12AB3055A0D43D /* VeloxNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VeloxNotificationManager.swift; sourceTree = "<group>"; };
 		7769F412595340EBFFA61A70 /* VeloxEndpointSecurity-Distribution.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "VeloxEndpointSecurity-Distribution.xcconfig"; sourceTree = "<group>"; };
 		789B97F45570C560562F0BFD /* NetworkFlowDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkFlowDecision.swift; sourceTree = "<group>"; };
+		7B3722203CD63440017EA5E5 /* EgressClassificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EgressClassificationCoordinator.swift; sourceTree = "<group>"; };
 		7B8E1619D3CB9D2C81CB824D /* FileClassificationCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileClassificationCache.swift; sourceTree = "<group>"; };
 		7FEE10A504ABC6F0D8877A06 /* ProcessContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessContext.swift; sourceTree = "<group>"; };
 		81B64AFAF9DDCBE97E80E5EC /* EndpointSecurityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndpointSecurityService.swift; sourceTree = "<group>"; };
@@ -297,6 +305,7 @@
 		05F5095A3B6FA39DAAB179F5 /* Policy */ = {
 			isa = PBXGroup;
 			children = (
+				400938AC0A29147A49A74293 /* ClassifiedEgressDecision.swift */,
 				82BE1F9CB74E8BC66BF68CF0 /* ClipboardDecision.swift */,
 				C9F515F38AE8E3EF183E57EF /* NearbyTransferDecision.swift */,
 				1254D68A51726F1D6EE581FE /* OpticalDiskImageDecision.swift */,
@@ -432,6 +441,7 @@
 				E848C9198C7BDCF17BF943E0 /* AppDelegate.swift */,
 				A58587F3DE67C667C45F46A7 /* BundledWebSchemeHandler.swift */,
 				C15D11AED23FA50D77313DF3 /* ConsoleController.swift */,
+				7B3722203CD63440017EA5E5 /* EgressClassificationCoordinator.swift */,
 				4F74E68E1173BFCE49C53BCF /* EndpointDiscoveryService.swift */,
 				C08CD7BEF1DC8E25506C7A63 /* ExtensionControlClient.swift */,
 				934A79A96247E273D204D883 /* InstalledApplicationScanner.swift */,
@@ -440,6 +450,7 @@
 				ACD70840CAC2021E9E9296EE /* PasteboardMonitor.swift */,
 				346F085B281B7B42CD90E5A4 /* ScreenshotOCRMonitor.swift */,
 				05AF34D754592B8E163EE311 /* VeloxActiveEventMonitor.swift */,
+				46CCA710012A91E1F6741C7D /* VeloxLiveLogCommand.swift */,
 				707C242EEB12AB3055A0D43D /* VeloxNotificationManager.swift */,
 			);
 			name = VeloxApp;
@@ -528,6 +539,7 @@
 		DF252518CBE44A287C7E42DF /* VeloxCoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				1AEFB3A17AF3CF9AE3D78033 /* ClassifiedEgressControlTests.swift */,
 				2FAD55C88FA4CA581759750C /* EmailAttachmentControlTests.swift */,
 				B3D01CA708040F77F43601AD /* EndpointDiscoveryPolicyTests.swift */,
 				11D567B51591F3CFA2405621 /* EventLoggerTests.swift */,
@@ -801,6 +813,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BD9D6EEBC34879F72AC1DFC1 /* ClassifiedEgressControlTests.swift in Sources */,
 				C5C2270921B79A0F1CB43030 /* EmailAttachmentControlTests.swift in Sources */,
 				51301CB69390A7B13899573D /* EndpointDiscoveryPolicyTests.swift in Sources */,
 				B9D72634EE601330AB924B67 /* EventLoggerTests.swift in Sources */,
@@ -845,6 +858,7 @@
 				2D713E9C6FEDED1FF66546F7 /* AppDelegate.swift in Sources */,
 				921147591CB5C2DE21D84FC2 /* BundledWebSchemeHandler.swift in Sources */,
 				995F5E73389458081F6AD060 /* ConsoleController.swift in Sources */,
+				8B3075D817F89E354DCC0E12 /* EgressClassificationCoordinator.swift in Sources */,
 				32DFF4C34C568D84C6AD4078 /* EndpointDiscoveryService.swift in Sources */,
 				05FBE3C4CC47345F4E955468 /* ExtensionControlClient.swift in Sources */,
 				DA752384226B2256532D2F2D /* InstalledApplicationScanner.swift in Sources */,
@@ -852,6 +866,7 @@
 				2A778453D1F93BD65775D8CF /* PasteboardMonitor.swift in Sources */,
 				097C8ECD84042858B2DFA4B8 /* ScreenshotOCRMonitor.swift in Sources */,
 				A47E6072CE554F474BFF829A /* VeloxActiveEventMonitor.swift in Sources */,
+				B774FC8FA88C124D9A964B4E /* VeloxLiveLogCommand.swift in Sources */,
 				3BDA3AEDFE6118CB0786BD99 /* VeloxNotificationManager.swift in Sources */,
 				7D53196C3966701A36A148D5 /* main.swift in Sources */,
 			);
@@ -861,6 +876,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3D9175F02DF166CD58A6D3B8 /* ClassifiedEgressDecision.swift in Sources */,
 				824E8CA6DB9FDDD1098C5647 /* ClipboardDecision.swift in Sources */,
 				07160851501CFA85F6B9BB9D /* EndpointSecurityService.swift in Sources */,
 				7FF8AB80B6BCFBF3A807EEB0 /* EventLogger.swift in Sources */,

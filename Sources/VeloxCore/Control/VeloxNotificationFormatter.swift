@@ -21,6 +21,40 @@ public enum VeloxNotificationFormatter {
     ) -> FormattedNotification {
         let title = "Blocked by Velox DLP"
 
+        if action == "classified-content-scan-required" {
+            let fileName = parseFileName(from: target)
+            return FormattedNotification(
+                title: title,
+                subtitle: "File Classification Required",
+                body: "'\(fileName)' was held while Velox classifies it on device. Retry the transfer shortly."
+            )
+        }
+        if action == "egress-scan-failed" {
+            let fileName = parseFileName(from: target)
+            let reason = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "-", with: " ")
+            return FormattedNotification(
+                title: title,
+                subtitle: "File Classification Failed",
+                body: "Sharing '\(fileName)' remains blocked because classification failed: \(reason)."
+            )
+        }
+        if action.hasPrefix("classified-content-") {
+            let fileName = parseFileName(from: target)
+            let classifications = detail
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .prefix(3)
+                .joined(separator: ", ")
+            let reason = classifications.isEmpty ? "protected content" : classifications
+            return FormattedNotification(
+                title: title,
+                subtitle: "Classified File Transfer Blocked",
+                body: "Sharing '\(fileName)' was blocked because it contains \(reason)."
+            )
+        }
+
         switch module {
         case "application-control":
             let appName = parseApplicationName(from: target, detail: detail)

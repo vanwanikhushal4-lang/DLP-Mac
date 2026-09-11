@@ -88,6 +88,114 @@ public final class PolicyEngine: @unchecked Sendable {
         return activePolicy
     }
 
+    /// Evaluates one already-identified outbound file transfer. This method is
+    /// intentionally pure and in-memory so it is safe on an ES AUTH callback.
+    public func evaluateClassifiedEgress(
+        channel: ClassifiedEgressChannel,
+        classification: FileClassificationRecord?
+    ) -> ClassifiedEgressDecision {
+        os_unfair_lock_lock(lock)
+        let policy = self.activePolicy
+        os_unfair_lock_unlock(lock)
+
+        let config = policy.ocrControl
+        guard config.egressMode != .disabled,
+              config.protectedEgressChannels.contains(channel) else {
+            return ClassifiedEgressDecision(
+                decisionString: "allowed",
+                shouldAllow: true,
+                isCandidate: false,
+                requiresClassification: false,
+                matchingRuleId: nil,
+                policyVersion: policy.policyVersion,
+                channel: channel
+            )
+        }
+
+        guard let classification,
+              classification.policyVersion == policy.policyVersion else {
+            return ClassifiedEgressDecision(
+                decisionString: config.egressMode == .enforce ? "blocked" : "would-block",
+                shouldAllow: config.egressMode != .enforce,
+                isCandidate: true,
+                requiresClassification: true,
+                matchingRuleId: "content-egress-classification-required",
+                policyVersion: policy.policyVersion,
+                channel: channel
+            )
+        }
+
+        let protected = Set(config.protectedEgressClassifications.map { $0.lowercased() })
+        let matches = classification.classifications.filter {
+            protected.isEmpty || protected.contains($0.lowercased())
+        }
+        guard !matches.isEmpty else {
+            return ClassifiedEgressDecision(
+                decisionString: "allowed",
+                shouldAllow: true,
+                isCandidate: true,
+                requiresClassification: false,
+                matchingRuleId: nil,
+                policyVersion: policy.policyVersion,
+                channel: channel,
+                contentHashPrefix: classification.contentHashPrefix
+            )
+        }
+
+        return ClassifiedEgressDecision(
+            decisionString: config.egressMode == .enforce ? "blocked" : "would-block",
+            shouldAllow: config.egressMode != .enforce,
+            isCandidate: true,
+            requiresClassification: false,
+            matchingRuleId: "content-egress-protected-\(channel.rawValue)",
+            policyVersion: policy.policyVersion,
+            channel: channel,
+            classifications: matches,
+            contentHashPrefix: classification.contentHashPrefix
+        )
+    }
+
+    /// Maps a read-only file open to one of the supported outbound channels.
+    /// Downloads and inbound transfers request writes and never match.
+    public func classifiedEgressChannelForOpen(
+        process: ProcessContext,
+        filePath: String,
+        requestedFlags: UInt32,
+        isRegularFile: Bool
+    ) -> ClassifiedEgressChannel? {
+        os_unfair_lock_lock(lock)
+        let policy = self.activePolicy
+        os_unfair_lock_unlock(lock)
+
+        let readRequested = (requestedFlags & UInt32(FREAD)) != 0
+        let writeRequested = (requestedFlags & UInt32(FWRITE)) != 0
+        let isEventOnly = (requestedFlags & UInt32(O_EVTONLY)) != 0
+        guard policy.ocrControl.egressMode != .disabled,
+              isRegularFile, readRequested, !writeRequested, !isEventOnly,
+              !Self.isBrowserPartialDownloadPath(filePath),
+              !Self.isApplicationOrBundlePath(filePath),
+              !Self.isSystemMetadataPath(filePath) else { return nil }
+
+        if Self.nearbyTransferChannel(process) != nil,
+           Self.isProtectedUserContentPath(
+               filePath,
+               directoryNames: policy.nearbyTransferControl.protectedDirectoryNames
+           ) {
+            return .nearbyTransfer
+        }
+        if policy.emailAttachmentControl.mailClients.contains(where: { matches(rule: $0, process: process) }) {
+            return .email
+        }
+        if Self.isSupportedBrowser(process),
+           Self.isProtectedUserContentPath(
+               filePath,
+               directoryNames: policy.webUploadControl.protectedDirectoryNames
+           ) {
+            return .webUpload
+        }
+        return nil
+    }
+
     /// Evaluates the active policy against the intercepted process context.
     /// This method is strictly thread-safe, executes entirely in-memory,
     /// and defaults to ALLOW on any unexpected error.

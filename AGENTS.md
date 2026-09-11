@@ -46,7 +46,8 @@ Network Filter decisions are sent over an asynchronous, write-only XPC event sin
 - **Do not log sensitive content.** Clipboard logging is limited to source identity, coarse content categories, item count, and decision. Do not add copied text, image bytes, or file paths to clipboard telemetry.
 - **Do not confuse observation with kernel authorization.** Endpoint Security can deny exec, open, and mount authorization events. macOS exposes no Endpoint Security clipboard event; Clipboard Control is a user-session pasteboard monitor and must be described as such.
 - **Downloads remain allowed.** Browser upload enforcement must not deny write/finalization paths used by downloads.
-- **Email classification must be fresh.** Native-mail enforcement may deny only metadata-matched records from Endpoint Data Discovery. Modified and unscanned files fail open; never claim recipient or Send-event visibility.
+- **Classified egress is strict and fresh.** When `ocrControl.egressMode` enforces, a supported outbound transfer with no current metadata-bound verdict is held and queued for asynchronous on-device classification. A changed file never inherits an old result. OCR must never run inside an Endpoint Security authorization callback.
+- **Email classification must be fresh.** Native-mail attachment enforcement may deny metadata-matched records from discovery or the egress classifier. Its older channel-specific mode fails open for unclassified files; classified-egress enforce mode intentionally holds unknown files. Never claim recipient or Send-event visibility.
 - **Incoming nearby transfers remain allowed.** Nearby-transfer rules target outbound read access; ordinary Bluetooth accessories remain outside that feature.
 
 ## Runtime files
@@ -57,6 +58,7 @@ Network Filter decisions are sent over an asynchronous, write-only XPC event sin
 - Printer restoration state: `/Library/Application Support/VeloxMacDLP/printer-state.json`
 - USB container recovery keys: `/Library/Application Support/VeloxMacDLP/usb-container-keys.json`
 - Structured activity log: `/Library/Logs/VeloxMacDLP/events.jsonl`
+- Live diagnostic console: `/Applications/VeloxMacDLP.app/Contents/MacOS/VeloxMacDLP --live-logs`
 - Sensitive screenshot quarantine: `~/Library/Application Support/VeloxMacDLP/Quarantine/Screenshots/`
 - Endpoint discovery reports: `~/Library/Application Support/VeloxMacDLP/Discovery/Reports/`
 - XPC Mach service: `L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc`
@@ -119,6 +121,11 @@ After replacing an installed build, launch `/Applications/VeloxMacDLP.app` so `O
 systemextensionsctl list | rg 'co\.velox\.macdlp\.endpointsecurity'
 ```
 
+For a privacy-safe human-readable timeline of activation, health, policy, OCR,
+and enforcement decisions, run the installed executable with `--live-logs`.
+The command is read-only and must never print extracted document or clipboard
+content.
+
 Preserve the previous installed `.app` in a specific backup path before replacement. Never use broad recursive deletion, `git reset --hard`, or destructive commands against a workspace or home directory.
 
 ## Feature-specific implementation notes
@@ -168,6 +175,8 @@ Uses Endpoint Security `AUTH_CREATE` to deny new `.pdf` files created by applica
 The host performs on-device text recognition with Apple Vision for images and image-only PDF pages; PDFKit extracts embedded PDF text first. OCR and classification run asynchronously and never inside an Endpoint Security authorization deadline. The policy supports keyword, regular-expression, Luhn-valid payment-card, Indian PAN, and Verhoeff-valid Aadhaar rules.
 
 Recognized text and image bytes are memory-only. Events may contain a short SHA-256 prefix, file type, rule IDs, classification names, counts, timing, and confidence, but never recognized text or source file paths. Screenshot candidates must originate from Apple's signed screenshot tools. Screenshot enforcement is post-capture remediation: matching images are moved to the per-user quarantine by default, or deleted only when policy explicitly selects deletion. Never describe it as pre-capture prevention.
+
+Classified egress reuses the same rules for USB `AUTH_COPYFILE` operations and read-only opens attributed to supported browsers, configured native mail clients, and known AirDrop/Bluetooth sharing services. In enforce mode an unknown file is denied once, classified asynchronously by the host, then allowed or blocked on retry from the immutable metadata-bound cache. The USB prototype has authoritative source/destination attribution for `AUTH_COPYFILE`; application-specific streaming copies that do not emit that event require separate acceptance coverage.
 
 ### Endpoint Data Discovery
 
