@@ -44,7 +44,7 @@
         "mode": {
           "type": "string",
           "enum": ["enforce", "audit-only", "disabled"],
-          "description": "Prototype browser file-upload enforcement mode."
+          "description": "Browser and managed native-app file-upload enforcement mode."
         },
         "protectedDirectoryNames": {
           "type": "array",
@@ -55,6 +55,12 @@
             "minLength": 1,
             "pattern": "^[^/]+$"
           }
+        },
+        "nativeUploadClients": {
+          "type": "array",
+          "maxItems": 64,
+          "description": "Securely identified native applications whose outbound file reads use the upload controls.",
+          "items": { "$ref": "#/$defs/ApplicationRule" }
         }
       }
     },

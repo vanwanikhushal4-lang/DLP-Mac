@@ -1,3 +1,5 @@
+import CryptoKit
+import Darwin
 import Foundation
 import Security
 import VeloxCore
@@ -13,6 +15,8 @@ private struct ControlSnapshot: Codable {
     let blockedExecutablePaths: [String]
     let webUploadMode: String
     let webUploadProtectedDirectories: [String]
+    let webUploadNativeClientCount: Int
+    let webUploadNativeClientSigningIds: [String]
     let emailAttachmentMode: String
     let emailClientCount: Int
     let emailClientSigningIds: [String]
@@ -137,6 +141,199 @@ private struct EndpointDiscoveryEventAttempt: Decodable {
     let modifiedAtNanoseconds: Int64?
 }
 
+private struct NativeEgressRemediationResult {
+    let safeToShortenHold: Bool
+    let quarantinedStageCount: Int
+    let processDisposition: String
+}
+
+/// Cancels a protected native-app transfer without leaving the whole encrypted
+/// client offline for the original 15-minute fail-closed window. Public macOS
+/// APIs cannot correlate a TLS flow with one attachment, so the safe prototype
+/// boundary is: quarantine any exact hash-matched broker copy, verify the live
+/// process's code signature, then terminate that one client session.
+private final class NativeEgressSensitiveTransferRemediator {
+    private static let whatsAppSigningId = "net.whatsapp.WhatsApp"
+    private static let whatsAppTeamId = "57T9237FN3"
+    private let logger = Logger(
+        subsystem: "co.velox.macdlp.endpointsecurity",
+        category: "NativeEgressRemediation"
+    )
+
+    func remediate(
+        record: FileClassificationRecord,
+        holds: [NativeEgressNetworkHold]
+    ) -> NativeEgressRemediationResult {
+        let relevant = holds.filter {
+            $0.status == .blockedContent &&
+                $0.originSigningId == Self.whatsAppSigningId &&
+                $0.teamId == Self.whatsAppTeamId
+        }
+        guard !relevant.isEmpty else {
+            return NativeEgressRemediationResult(
+                safeToShortenHold: false,
+                quarantinedStageCount: 0,
+                processDisposition: "unsupported-native-client"
+            )
+        }
+
+        let quarantine = quarantineWhatsAppStageCopies(record: record)
+        let dispositions = Set(relevant.map(terminateVerifiedProcess))
+        let processWasCleared = !dispositions.contains(.verificationFailed) &&
+            !dispositions.contains(.terminationFailed)
+        let stageWasCleared = quarantine.failedCount == 0
+        let safe = processWasCleared && stageWasCleared
+        let disposition = dispositions.map(\.rawValue).sorted().joined(separator: ",")
+
+        logger.notice(
+            "Protected WhatsApp transfer remediation: disposition=\(disposition, privacy: .public), quarantined=\(quarantine.movedCount), stageFailures=\(quarantine.failedCount), shortHold=\(safe)"
+        )
+        return NativeEgressRemediationResult(
+            safeToShortenHold: safe,
+            quarantinedStageCount: quarantine.movedCount,
+            processDisposition: disposition
+        )
+    }
+
+    private enum ProcessDisposition: String {
+        case terminated
+        case alreadyExited
+        case pidReused
+        case verificationFailed
+        case terminationFailed
+    }
+
+    private func terminateVerifiedProcess(_ hold: NativeEgressNetworkHold) -> ProcessDisposition {
+        let pid = pid_t(hold.originPID)
+        guard pid > 1 else { return .verificationFailed }
+        if kill(pid, 0) != 0 {
+            return errno == ESRCH ? .alreadyExited : .verificationFailed
+        }
+
+        let attributes = [kSecGuestAttributePid: NSNumber(value: pid)] as CFDictionary
+        var dynamicCode: SecCode?
+        guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &dynamicCode) == errSecSuccess,
+              let dynamicCode,
+              SecCodeCheckValidity(
+                dynamicCode,
+                SecCSFlags(rawValue: kSecCSStrictValidate),
+                nil
+              ) == errSecSuccess else {
+            return .verificationFailed
+        }
+
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(dynamicCode, [], &staticCode) == errSecSuccess,
+              let staticCode else { return .verificationFailed }
+
+        var signingInformation: CFDictionary?
+        guard SecCodeCopySigningInformation(
+            staticCode,
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &signingInformation
+        ) == errSecSuccess,
+              let values = signingInformation as? [String: Any],
+              let signingId = values[kSecCodeInfoIdentifier as String] as? String,
+              let teamId = values[kSecCodeInfoTeamIdentifier as String] as? String else {
+            return .verificationFailed
+        }
+
+        // A live PID with a different immutable identity means the original
+        // WhatsApp process is already gone and the PID has been reused. Never
+        // signal the replacement process.
+        guard signingId == hold.originSigningId, teamId == hold.teamId else {
+            return .pidReused
+        }
+        if kill(pid, SIGTERM) == 0 { return .terminated }
+        return errno == ESRCH ? .alreadyExited : .terminationFailed
+    }
+
+    private func quarantineWhatsAppStageCopies(
+        record: FileClassificationRecord
+    ) -> (movedCount: Int, failedCount: Int) {
+        let source = URL(fileURLWithPath: record.filePath).standardizedFileURL
+        let components = source.pathComponents
+        guard components.count >= 3, components[1] == "Users" else {
+            // Remediation remains safe when the exact signed process is
+            // terminated; this simply means no user-container path was derived.
+            return (0, 0)
+        }
+        let home = URL(fileURLWithPath: "/Users", isDirectory: true)
+            .appendingPathComponent(components[2], isDirectory: true)
+        let stageRoot = home
+            .appendingPathComponent("Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents", isDirectory: true)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: stageRoot.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return (0, 0) }
+
+        let resolvedRoot = stageRoot.resolvingSymlinksInPath().standardizedFileURL.path
+        let quarantineRoot = home
+            .appendingPathComponent("Library/Application Support/VeloxMacDLP/Quarantine/WhatsApp", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: quarantineRoot,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            return (0, 1)
+        }
+
+        var enumerationFailed = false
+        guard let enumerator = FileManager.default.enumerator(
+            at: stageRoot,
+            includingPropertiesForKeys: nil,
+            options: [],
+            errorHandler: { _, _ in
+                enumerationFailed = true
+                return true
+            }
+        ) else { return (0, 1) }
+
+        let expectedHash = record.contentHashPrefix.lowercased()
+        var inspected = 0
+        var moved = 0
+        var failed = 0
+        for case let candidate as URL in enumerator {
+            inspected += 1
+            if inspected > 512 { break }
+            let resolvedCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL
+            guard resolvedCandidate.path.hasPrefix(resolvedRoot + "/") else { continue }
+            var value = stat()
+            guard lstat(resolvedCandidate.path, &value) == 0,
+                  value.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+                  Int64(value.st_size) == record.fileSize,
+                  sha256Prefix(of: resolvedCandidate) == expectedHash else { continue }
+
+            let destination = quarantineRoot.appendingPathComponent(
+                "\(UUID().uuidString)-\(resolvedCandidate.lastPathComponent)"
+            )
+            do {
+                try FileManager.default.moveItem(at: resolvedCandidate, to: destination)
+                moved += 1
+            } catch {
+                failed += 1
+            }
+        }
+        if enumerationFailed { failed += 1 }
+        return (moved, failed)
+    }
+
+    private func sha256Prefix(of url: URL) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        do {
+            while let data = try handle.read(upToCount: 1_048_576), !data.isEmpty {
+                hasher.update(data: data)
+            }
+            return hasher.finalize().map { String(format: "%02x", $0) }.joined().prefix(12).description
+        } catch {
+            return nil
+        }
+    }
+}
+
 /// Resolves each valid, Team-ID-bound Velox caller to its least-privilege role.
 /// PID lookup is performed while accepting the live connection, then both the
 /// signature validity and immutable signing identity are checked.
@@ -253,6 +450,8 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
     private let usbEncryptionCoordinator: USBEncryptionCoordinator
     private let printerCoordinator: PrinterControlCoordinator
     private let classificationCache: FileClassificationCache
+    private let nativeEgressNetworkHoldStore: NativeEgressNetworkHoldStore
+    private let nativeEgressSensitiveTransferRemediator = NativeEgressSensitiveTransferRemediator()
     private let mutationLock = NSLock()
     private let clientsLock = NSLock()
     private var connectedClients: [NSXPCConnection] = []
@@ -265,7 +464,8 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
         eventLogger: EventLogger? = nil,
         usbEncryptionCoordinator: USBEncryptionCoordinator,
         printerCoordinator: PrinterControlCoordinator,
-        classificationCache: FileClassificationCache = FileClassificationCache()
+        classificationCache: FileClassificationCache = FileClassificationCache(),
+        nativeEgressNetworkHoldStore: NativeEgressNetworkHoldStore = NativeEgressNetworkHoldStore()
     ) {
         self.policyManager = policyManager
         self.healthPath = healthPath
@@ -274,6 +474,7 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
         self.usbEncryptionCoordinator = usbEncryptionCoordinator
         self.printerCoordinator = printerCoordinator
         self.classificationCache = classificationCache
+        self.nativeEgressNetworkHoldStore = nativeEgressNetworkHoldStore
     }
 
     func addClient(_ connection: NSXPCConnection) {
@@ -392,7 +593,8 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             applicationControl: current.applicationControl,
             webUploadControl: WebUploadControlConfig(
                 mode: requestedMode,
-                protectedDirectoryNames: current.webUploadControl.protectedDirectoryNames
+                protectedDirectoryNames: current.webUploadControl.protectedDirectoryNames,
+                nativeUploadClients: current.webUploadControl.nativeUploadClients
             ),
             emailAttachmentControl: current.emailAttachmentControl,
             usbStorageControl: current.usbStorageControl,
@@ -1585,14 +1787,52 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             return
         }
         classificationCache.upsert(valid)
+        if policy.ocrControl.egressMode == .enforce,
+           policy.ocrControl.protectedEgressChannels.contains(.webUpload) {
+            for record in valid {
+                let resolvedHolds = nativeEgressNetworkHoldStore.resolveClassification(
+                    filePath: record.filePath,
+                    classifications: record.classifications,
+                    policyVersion: record.policyVersion
+                )
+                guard !record.classifications.isEmpty, !resolvedHolds.isEmpty else { continue }
+                remediateProtectedNativeEgress(record: record, holds: resolvedHolds)
+            }
+        } else {
+            nativeEgressNetworkHoldStore.clear()
+        }
         reply(#"{"ok":true,"acceptedCount":\#(valid.count)}"#)
+    }
+
+    func remediateProtectedNativeEgress(
+        record: FileClassificationRecord,
+        hold: NativeEgressNetworkHold
+    ) {
+        remediateProtectedNativeEgress(record: record, holds: [hold])
+    }
+
+    private func remediateProtectedNativeEgress(
+        record: FileClassificationRecord,
+        holds: [NativeEgressNetworkHold]
+    ) {
+        let remediation = nativeEgressSensitiveTransferRemediator.remediate(
+            record: record,
+            holds: holds
+        )
+        guard remediation.safeToShortenHold else { return }
+        let whatsappHoldIds = Set(holds.compactMap { hold in
+            hold.originSigningId == "net.whatsapp.WhatsApp" && hold.teamId == "57T9237FN3"
+                ? hold.holdId
+                : nil
+        })
+        nativeEgressNetworkHoldStore.markRemediated(holdIds: whatsappHoldIds)
     }
 
     func recordNetworkFlowEvent(_ payloadJSON: String, withReply reply: @escaping (String) -> Void) {
         guard let data = payloadJSON.data(using: .utf8), data.count <= 32_768,
               let received = try? JSONDecoder().decode(ExecutionEvent.self, from: data),
-              received.module == "network-flow-control",
-              received.action == "socket-connect",
+              ((received.module == "network-flow-control" && received.action == "socket-connect") ||
+               (received.module == "web-upload-control" && received.action == "native-app-network-drop")),
               ["blocked", "would-block"].contains(received.decision) else {
             reply(errorJSON("Invalid network-flow event."))
             return
@@ -1610,14 +1850,33 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
               received.policyVersion >= 0,
               received.ruleId?.count ?? 0 <= 512,
               received.signingId?.count ?? 0 <= 512,
-              received.teamId?.count ?? 0 <= 128 else {
+              received.teamId?.count ?? 0 <= 128,
+              received.classifications?.count ?? 0 <= 32,
+              received.classifications?.allSatisfy({ !$0.isEmpty && $0.count <= 256 }) ?? true else {
             reply(errorJSON("Network-flow event contains invalid metadata."))
             return
         }
 
+        if received.module == "web-upload-control" {
+            let process = ProcessContext(
+                pid: received.pid,
+                parentPid: received.parentPid,
+                uid: received.uid,
+                signingId: received.signingId,
+                teamId: received.teamId,
+                isPlatformBinary: false,
+                cdhash: nil,
+                executablePath: executablePath
+            )
+            guard policyManager.policyEngine.webUploadClientKind(process: process) == "native-app" else {
+                reply(errorJSON("Native egress event does not match a configured signed client."))
+                return
+            }
+        }
+
         let event = ExecutionEvent(
-            module: "network-flow-control",
-            action: "socket-connect",
+            module: received.module,
+            action: received.action,
             decision: received.decision,
             ruleId: received.ruleId,
             policyVersion: received.policyVersion,
@@ -1631,7 +1890,8 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
             authResponseResult: received.authResponseResult,
             resourcePath: destination,
             pageURL: received.pageURL.map { String($0.prefix(32)) },
-            interaction: received.interaction.map { String($0.prefix(64)) }
+            interaction: received.interaction.map { String($0.prefix(64)) },
+            classifications: received.classifications
         )
         eventLogger.logEventSync(event)
         if event.decision == "blocked" {
@@ -1754,6 +2014,8 @@ final class VeloxControlService: NSObject, VeloxControlProtocol, VeloxNetworkEve
                 blockedExecutablePaths: policy.applicationControl.blockedApplications.compactMap(\.executablePath),
                 webUploadMode: policy.webUploadControl.mode.rawValue,
                 webUploadProtectedDirectories: policy.webUploadControl.protectedDirectoryNames,
+                webUploadNativeClientCount: policy.webUploadControl.nativeUploadClients.count,
+                webUploadNativeClientSigningIds: policy.webUploadControl.nativeUploadClients.compactMap(\.signingId),
                 emailAttachmentMode: policy.emailAttachmentControl.mode.rawValue,
                 emailClientCount: policy.emailAttachmentControl.mailClients.count,
                 emailClientSigningIds: policy.emailAttachmentControl.mailClients.compactMap(\.signingId),

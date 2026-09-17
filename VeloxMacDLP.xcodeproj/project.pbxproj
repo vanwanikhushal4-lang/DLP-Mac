@@ -76,10 +76,12 @@
 		C5C2270921B79A0F1CB43030 /* EmailAttachmentControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FAD55C88FA4CA581759750C /* EmailAttachmentControlTests.swift */; };
 		D5E4E8D35CF7AA6810C9A2FC /* ExternalUSBVolumeParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82306BC561FB19C2E31672B6 /* ExternalUSBVolumeParser.swift */; };
 		D5E90D876730FE2D32C483BF /* SecurityGuardianTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2950E1340C2F09426D65D40D /* SecurityGuardianTests.swift */; };
+		D61D62F763499456B1CCD916 /* NativeEgressNetworkHoldStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 641180258A0B71842B3633B9 /* NativeEgressNetworkHoldStore.swift */; };
 		D7090AF3A0E30B2F2B01D2EF /* PrinterControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E01C90928CD01862787AE67E /* PrinterControlTests.swift */; };
 		DA752384226B2256532D2F2D /* InstalledApplicationScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 934A79A96247E273D204D883 /* InstalledApplicationScanner.swift */; };
 		DC0893EE91F2C320157EE04A /* SecurityGuardian.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231CCD8D825D187ED70A36EC /* SecurityGuardian.swift */; };
 		E53ADF7AB5A5760AE1193791 /* OpticalDiskImageControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386684B8DC0C80AC4019DF69 /* OpticalDiskImageControlTests.swift */; };
+		E75F33EB7F9FDD914624AF35 /* NativeEgressNetworkHoldStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFE067BE5C6FA16F6B77F00F /* NativeEgressNetworkHoldStoreTests.swift */; };
 		EAD237DAAE2DF7EAD8E02815 /* libVeloxCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82882244835FE33A8714983D /* libVeloxCore.a */; };
 		EFBC90373C73B96B0A5B3B0A /* FilterDataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ED218F132405DA6ADF27A86 /* FilterDataProvider.swift */; };
 		F168C25071F87FA7EE01F690 /* ProcessContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FEE10A504ABC6F0D8877A06 /* ProcessContext.swift */; };
@@ -201,6 +203,7 @@
 		528A941695824503AF88CEF7 /* VeloxExtension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = VeloxExtension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		53E33542B0AB7A7D171F9828 /* VeloxCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VeloxCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		60E833D072235A4C1A0126AF /* USBEncryptionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = USBEncryptionCoordinator.swift; sourceTree = "<group>"; };
+		641180258A0B71842B3633B9 /* NativeEgressNetworkHoldStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeEgressNetworkHoldStore.swift; sourceTree = "<group>"; };
 		64289EDB918B3B6FE1745E32 /* OCRClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRClassifierTests.swift; sourceTree = "<group>"; };
 		6509C6F0F8BF66069AFDB446 /* VeloxSafariUploadGuard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VeloxSafariUploadGuard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E8F9FBDB615BC30D8B9F318 /* VeloxMacDLP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VeloxMacDLP.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -247,6 +250,7 @@
 		DA59E86D92DD7301F7DDFF33 /* NetworkEventForwarder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkEventForwarder.swift; sourceTree = "<group>"; };
 		DC430FE867CF42E31120AFBD /* ManagedVirtualMountAllowance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedVirtualMountAllowance.swift; sourceTree = "<group>"; };
 		DDF89EA6F481543896EFCCED /* dist */ = {isa = PBXFileReference; lastKnownFileType = folder; name = dist; path = Web/dist; sourceTree = SOURCE_ROOT; };
+		DFE067BE5C6FA16F6B77F00F /* NativeEgressNetworkHoldStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeEgressNetworkHoldStoreTests.swift; sourceTree = "<group>"; };
 		E01C90928CD01862787AE67E /* PrinterControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterControlTests.swift; sourceTree = "<group>"; };
 		E1519AE88C01CAC0621D6474 /* NetworkFlowControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkFlowControlTests.swift; sourceTree = "<group>"; };
 		E1C9DEADFDB02CC64D2389E7 /* OCRServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRServiceTests.swift; sourceTree = "<group>"; };
@@ -374,6 +378,7 @@
 			isa = PBXGroup;
 			children = (
 				7B8E1619D3CB9D2C81CB824D /* FileClassificationCache.swift */,
+				641180258A0B71842B3633B9 /* NativeEgressNetworkHoldStore.swift */,
 				9C7B994689299B77893A20D3 /* OCRClassifier.swift */,
 			);
 			path = OCR;
@@ -543,6 +548,7 @@
 				2FAD55C88FA4CA581759750C /* EmailAttachmentControlTests.swift */,
 				B3D01CA708040F77F43601AD /* EndpointDiscoveryPolicyTests.swift */,
 				11D567B51591F3CFA2405621 /* EventLoggerTests.swift */,
+				DFE067BE5C6FA16F6B77F00F /* NativeEgressNetworkHoldStoreTests.swift */,
 				E1519AE88C01CAC0621D6474 /* NetworkFlowControlTests.swift */,
 				64289EDB918B3B6FE1745E32 /* OCRClassifierTests.swift */,
 				386684B8DC0C80AC4019DF69 /* OpticalDiskImageControlTests.swift */,
@@ -817,6 +823,7 @@
 				C5C2270921B79A0F1CB43030 /* EmailAttachmentControlTests.swift in Sources */,
 				51301CB69390A7B13899573D /* EndpointDiscoveryPolicyTests.swift in Sources */,
 				B9D72634EE601330AB924B67 /* EventLoggerTests.swift in Sources */,
+				E75F33EB7F9FDD914624AF35 /* NativeEgressNetworkHoldStoreTests.swift in Sources */,
 				4B251D45B7FF7B161A39A4E2 /* NetworkFlowControlTests.swift in Sources */,
 				F61F322E77E39772F9F7391E /* OCRClassifierTests.swift in Sources */,
 				E53ADF7AB5A5760AE1193791 /* OpticalDiskImageControlTests.swift in Sources */,
@@ -884,6 +891,7 @@
 				F3F0D91E5095D924A8892B74 /* FileClassificationCache.swift in Sources */,
 				561F3DA5E9DDD6E8D5004005 /* FileSecurity.swift in Sources */,
 				47BCAEF25BCF314F83DD9E68 /* ManagedVirtualMountAllowance.swift in Sources */,
+				D61D62F763499456B1CCD916 /* NativeEgressNetworkHoldStore.swift in Sources */,
 				6EDF6749A6A74B4E706489B7 /* NearbyTransferDecision.swift in Sources */,
 				B6902E465B99A64A05F0408F /* NetworkFlowDecision.swift in Sources */,
 				7C1F2BA03A83C90364AB675A /* NetworkMatcher.swift in Sources */,

@@ -41,6 +41,7 @@ final class PolicyManagerTests: XCTestCase {
         XCTAssertEqual(policy.applicationControl.blockedApplications.count, 1)
         XCTAssertEqual(policy.applicationControl.blockedApplications[0].signingId, "com.apple.calculator")
         XCTAssertEqual(policy.webUploadControl.mode, .disabled, "Legacy policies must default web uploads to disabled")
+        XCTAssertEqual(policy.webUploadControl.nativeUploadClients.count, 3)
         XCTAssertEqual(policy.usbStorageControl.encryptionMode, .disabled, "Legacy policies must not require a container")
         XCTAssertEqual(policy.usbStorageControl.containerSizePercent, 90)
         XCTAssertEqual(policy.printerControl.mode, .disabled, "Legacy policies must default printer control to disabled")
@@ -53,13 +54,22 @@ final class PolicyManagerTests: XCTestCase {
           "applicationControl": { "mode": "enforce" },
           "webUploadControl": {
             "mode": "audit-only",
-            "protectedDirectoryNames": ["Desktop", "Documents"]
+            "protectedDirectoryNames": ["Desktop", "Documents"],
+            "nativeUploadClients": [
+              {
+                "ruleId": "upload-whatsapp-main",
+                "signingId": "net.whatsapp.WhatsApp",
+                "teamId": "57T9237FN3"
+              }
+            ]
           }
         }
         """
         let policy = try VeloxPolicy.decodeStrict(from: validJSON.data(using: .utf8)!)
         XCTAssertEqual(policy.webUploadControl.mode, .auditOnly)
         XCTAssertEqual(policy.webUploadControl.protectedDirectoryNames, ["Desktop", "Documents"])
+        XCTAssertEqual(policy.webUploadControl.nativeUploadClients.count, 1)
+        XCTAssertEqual(policy.webUploadControl.nativeUploadClients[0].teamId, "57T9237FN3")
 
         let invalidJSON = """
         {

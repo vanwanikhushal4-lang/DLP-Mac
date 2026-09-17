@@ -39,6 +39,15 @@ public enum VeloxNotificationFormatter {
                 body: "Sharing '\(fileName)' remains blocked because classification failed: \(reason)."
             )
         }
+        if action == "native-app-network-drop" {
+            let isWhatsApp = detail.lowercased().contains("whatsapp")
+            let application = isWhatsApp ? "WhatsApp" : "the managed application"
+            return FormattedNotification(
+                title: title,
+                subtitle: isWhatsApp ? "WhatsApp Transfer Stopped" : "Native App Transfer Stopped",
+                body: "Velox stopped \(application)'s outbound connection because a protected attachment was selected."
+            )
+        }
         if action.hasPrefix("classified-content-") {
             let fileName = parseFileName(from: target)
             let classifications = detail
@@ -63,7 +72,8 @@ public enum VeloxNotificationFormatter {
             return FormattedNotification(title: title, subtitle: subtitle, body: body)
 
         case "web-upload-control":
-            let subtitle = "Web Upload Blocked"
+            let isWhatsApp = detail.lowercased().contains("whatsapp")
+            let subtitle = isWhatsApp ? "WhatsApp Transfer Blocked" : "Web Upload Blocked"
             let fileName = parseFileName(from: target)
             let browser = parseBrowserName(from: detail)
 
@@ -227,6 +237,7 @@ public enum VeloxNotificationFormatter {
         if lower.contains("brave") { return "Brave" }
         if lower.contains("arc") { return "Arc" }
         if lower.contains("opera") { return "Opera" }
+        if lower.contains("whatsapp") { return "WhatsApp" }
         return "browser"
     }
 

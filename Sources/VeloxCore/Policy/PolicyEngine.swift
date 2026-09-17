@@ -28,19 +28,22 @@ public struct WebUploadDecision: Sendable, Equatable {
     public let isUploadCandidate: Bool
     public let matchingRuleId: String?
     public let policyVersion: Int
+    public let clientKind: String?
 
     public init(
         decisionString: String,
         shouldAllowOpen: Bool,
         isUploadCandidate: Bool,
         matchingRuleId: String?,
-        policyVersion: Int
+        policyVersion: Int,
+        clientKind: String? = nil
     ) {
         self.decisionString = decisionString
         self.shouldAllowOpen = shouldAllowOpen
         self.isUploadCandidate = isUploadCandidate
         self.matchingRuleId = matchingRuleId
         self.policyVersion = policyVersion
+        self.clientKind = clientKind
     }
 }
 
@@ -186,7 +189,7 @@ public final class PolicyEngine: @unchecked Sendable {
         if policy.emailAttachmentControl.mailClients.contains(where: { matches(rule: $0, process: process) }) {
             return .email
         }
-        if Self.isSupportedBrowser(process),
+        if webUploadClientKind(process: process, config: policy.webUploadControl) != nil,
            Self.isProtectedUserContentPath(
                filePath,
                directoryNames: policy.webUploadControl.protectedDirectoryNames
@@ -303,6 +306,7 @@ public final class PolicyEngine: @unchecked Sendable {
         let isPartialDownload = Self.isBrowserPartialDownloadPath(filePath)
         let isBundleComponent = Self.isApplicationOrBundlePath(filePath)
         let isMetadata = Self.isSystemMetadataPath(filePath)
+        let clientKind = webUploadClientKind(process: process, config: policy.webUploadControl)
 
         guard mode != .disabled,
               isRegularFile,
@@ -310,7 +314,7 @@ public final class PolicyEngine: @unchecked Sendable {
               !isPartialDownload,
               !isBundleComponent,
               !isMetadata,
-              Self.isSupportedBrowser(process),
+              clientKind != nil,
               Self.isProtectedUserContentPath(
                   filePath,
                   directoryNames: policy.webUploadControl.protectedDirectoryNames
@@ -320,7 +324,8 @@ public final class PolicyEngine: @unchecked Sendable {
                 shouldAllowOpen: true,
                 isUploadCandidate: false,
                 matchingRuleId: nil,
-                policyVersion: version
+                policyVersion: version,
+                clientKind: nil
             )
         }
 
@@ -330,16 +335,18 @@ public final class PolicyEngine: @unchecked Sendable {
                 decisionString: "blocked",
                 shouldAllowOpen: false,
                 isUploadCandidate: true,
-                matchingRuleId: "browser-file-upload",
-                policyVersion: version
+                matchingRuleId: clientKind == "browser" ? "browser-file-upload" : "native-app-file-upload",
+                policyVersion: version,
+                clientKind: clientKind
             )
         case .auditOnly:
             return WebUploadDecision(
                 decisionString: "would-block",
                 shouldAllowOpen: true,
                 isUploadCandidate: true,
-                matchingRuleId: "browser-file-upload",
-                policyVersion: version
+                matchingRuleId: clientKind == "browser" ? "browser-file-upload" : "native-app-file-upload",
+                policyVersion: version,
+                clientKind: clientKind
             )
         case .disabled:
             return WebUploadDecision(
@@ -347,7 +354,8 @@ public final class PolicyEngine: @unchecked Sendable {
                 shouldAllowOpen: true,
                 isUploadCandidate: false,
                 matchingRuleId: nil,
-                policyVersion: version
+                policyVersion: version,
+                clientKind: nil
             )
         }
     }
@@ -859,6 +867,37 @@ public final class PolicyEngine: @unchecked Sendable {
             "company.thebrowser.browser"
         ]
         return prefixes.contains(where: { lower == $0 || lower.hasPrefix($0 + ".") })
+    }
+
+    /// Returns true only when the process is a supported browser or matches a
+    /// policy-configured native upload client using its complete signed identity.
+    public func isSupportedUploadClient(process: ProcessContext) -> Bool {
+        os_unfair_lock_lock(lock)
+        let config = self.activePolicy.webUploadControl
+        os_unfair_lock_unlock(lock)
+        return webUploadClientKind(process: process, config: config) != nil
+    }
+
+    /// A privacy-safe route label used by telemetry. It intentionally does not
+    /// expose a chat recipient, page URL, or message contents.
+    public func webUploadClientKind(process: ProcessContext) -> String? {
+        os_unfair_lock_lock(lock)
+        let config = self.activePolicy.webUploadControl
+        os_unfair_lock_unlock(lock)
+        return webUploadClientKind(process: process, config: config)
+    }
+
+    private func webUploadClientKind(
+        process: ProcessContext,
+        config: WebUploadControlConfig
+    ) -> String? {
+        if Self.isSupportedBrowser(process) {
+            return "browser"
+        }
+        if config.nativeUploadClients.contains(where: { matches(rule: $0, process: process) }) {
+            return "native-app"
+        }
+        return nil
     }
 
     private static func isSupportedBrowser(_ process: ProcessContext) -> Bool {

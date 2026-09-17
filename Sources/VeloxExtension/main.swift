@@ -20,6 +20,7 @@ let policyManager = PolicyManager(policyPath: policyPath, logger: eventLogger)
 let usbEncryptionAccessController = USBEncryptionAccessController()
 let classificationCache = FileClassificationCache()
 let managedVirtualMountAllowance = ManagedVirtualMountAllowance()
+let nativeEgressNetworkHoldStore = NativeEgressNetworkHoldStore()
 
 let usbEncryptionCoordinator = USBEncryptionCoordinator(
     policyEngine: policyManager.policyEngine,
@@ -38,7 +39,8 @@ let esService = EndpointSecurityService(
     logger: eventLogger,
     usbEncryptionAccessController: usbEncryptionAccessController,
     classificationCache: classificationCache,
-    managedVirtualMountAllowance: managedVirtualMountAllowance
+    managedVirtualMountAllowance: managedVirtualMountAllowance,
+    nativeEgressNetworkHoldStore: nativeEgressNetworkHoldStore
 )
 
 let controlService = VeloxControlService(
@@ -47,7 +49,8 @@ let controlService = VeloxControlService(
     eventLogger: eventLogger,
     usbEncryptionCoordinator: usbEncryptionCoordinator,
     printerCoordinator: printerCoordinator,
-    classificationCache: classificationCache
+    classificationCache: classificationCache,
+    nativeEgressNetworkHoldStore: nativeEgressNetworkHoldStore
 )
 
 esService.onEventBlocked = { [weak controlService] event in
@@ -61,6 +64,9 @@ esService.onVolumeTopologyChanged = { [weak usbEncryptionCoordinator] in
 }
 esService.onPotentialScreenshotCreated = { [weak controlService] path in
     controlService?.broadcastPotentialScreenshot(path: path)
+}
+esService.onProtectedNativeEgressHoldCreated = { [weak controlService] record, hold in
+    controlService?.remediateProtectedNativeEgress(record: record, hold: hold)
 }
 
 let controlListenerDelegate = VeloxControlListenerDelegate(service: controlService)
@@ -78,6 +84,10 @@ policyManager.onPolicyReloaded = { newPolicy in
         ruleIds: Set(newPolicy.ocrControl.rules.map(\.ruleId)),
         classifications: Set(newPolicy.ocrControl.rules.map { $0.classification.lowercased() })
     )
+    if newPolicy.ocrControl.egressMode != .enforce ||
+        !newPolicy.ocrControl.protectedEgressChannels.contains(.webUpload) {
+        nativeEgressNetworkHoldStore.clear()
+    }
 }
 
 policyManager.onPolicyError = { errMessage in

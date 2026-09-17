@@ -2,6 +2,19 @@ import XCTest
 @testable import VeloxCore
 
 final class VeloxNotificationTests: XCTestCase {
+    func testNativeWhatsAppNetworkDropNotificationStatesTransferWasStopped() {
+        let formatted = VeloxNotificationFormatter.format(
+            module: "web-upload-control",
+            action: "native-app-network-drop",
+            target: "encrypted native-app service",
+            detail: "net.whatsapp.WhatsApp"
+        )
+
+        XCTAssertEqual(formatted.title, "Blocked by Velox DLP")
+        XCTAssertEqual(formatted.subtitle, "WhatsApp Transfer Stopped")
+        XCTAssertTrue(formatted.body.contains("outbound connection"))
+    }
+
     func testEgressClassificationFailureNotificationExplainsStrictHold() {
         let formatted = VeloxNotificationFormatter.format(
             module: "ocr-content-classification",
@@ -62,6 +75,19 @@ final class VeloxNotificationTests: XCTestCase {
         XCTAssertEqual(formatted.title, "Blocked by Velox DLP")
         XCTAssertEqual(formatted.subtitle, "Web Upload Blocked")
         XCTAssertEqual(formatted.body, "Uploading 'financial_q4.pdf' to Google Chrome was blocked by security policy.")
+    }
+
+    func testWhatsAppUploadNotificationFormatting() {
+        let formatted = VeloxNotificationFormatter.format(
+            module: "web-upload-control",
+            action: "native-app-file-open",
+            target: "/Users/alice/Pictures/aadhaar.jpg",
+            detail: "net.whatsapp.WhatsApp"
+        )
+
+        XCTAssertEqual(formatted.title, "Blocked by Velox DLP")
+        XCTAssertEqual(formatted.subtitle, "WhatsApp Transfer Blocked")
+        XCTAssertEqual(formatted.body, "Uploading 'aadhaar.jpg' to WhatsApp was blocked by security policy.")
     }
 
     func testClipboardPasteNotificationFormatting() {

@@ -272,6 +272,85 @@ final class PolicyEngineTests: XCTestCase {
         XCTAssertFalse(decision.shouldAllowOpen)
         XCTAssertEqual(decision.decisionString, "blocked")
         XCTAssertEqual(decision.policyVersion, 8)
+        XCTAssertEqual(decision.clientKind, "browser")
+    }
+
+    func testWebUploadEnforcementBlocksAuthenticWhatsAppAttachmentRead() {
+        let policy = VeloxPolicy(
+            policyVersion: 18,
+            applicationControl: ApplicationControlConfig(mode: .disabled),
+            webUploadControl: WebUploadControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let whatsapp = ProcessContext(
+            pid: 700, parentPid: 1, uid: 501,
+            signingId: "net.whatsapp.WhatsApp", teamId: "57T9237FN3",
+            isPlatformBinary: false, cdhash: nil,
+            executablePath: "/Applications/WhatsApp.app/Contents/MacOS/WhatsApp"
+        )
+
+        let decision = engine.evaluateWebUploadOpen(
+            process: whatsapp,
+            filePath: "/Users/alice/Documents/customer-aadhaar.jpg",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertFalse(decision.shouldAllowOpen)
+        XCTAssertTrue(decision.isUploadCandidate)
+        XCTAssertEqual(decision.matchingRuleId, "native-app-file-upload")
+        XCTAssertEqual(decision.clientKind, "native-app")
+    }
+
+    func testWhatsAppIdentityRequiresMetasTeamSignature() {
+        let policy = VeloxPolicy(
+            policyVersion: 19,
+            applicationControl: ApplicationControlConfig(mode: .disabled),
+            webUploadControl: WebUploadControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let spoofed = ProcessContext(
+            pid: 701, parentPid: 1, uid: 501,
+            signingId: "net.whatsapp.WhatsApp", teamId: "ATTACKER123",
+            isPlatformBinary: false, cdhash: nil,
+            executablePath: "/Applications/Fake WhatsApp.app/Contents/MacOS/WhatsApp"
+        )
+
+        let decision = engine.evaluateWebUploadOpen(
+            process: spoofed,
+            filePath: "/Users/alice/Documents/report.pdf",
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(decision.shouldAllowOpen)
+        XCTAssertFalse(decision.isUploadCandidate)
+        XCTAssertFalse(engine.isSupportedUploadClient(process: spoofed))
+    }
+
+    func testWhatsAppIncomingWriteIsNotTreatedAsOutboundUpload() {
+        let policy = VeloxPolicy(
+            policyVersion: 20,
+            applicationControl: ApplicationControlConfig(mode: .disabled),
+            webUploadControl: WebUploadControlConfig(mode: .enforce)
+        )
+        let engine = PolicyEngine(policy: policy)
+        let whatsappService = ProcessContext(
+            pid: 702, parentPid: 1, uid: 501,
+            signingId: "net.whatsapp.WhatsApp.ServiceExtension", teamId: "57T9237FN3",
+            isPlatformBinary: false, cdhash: nil,
+            executablePath: "/Applications/WhatsApp.app/Contents/PlugIns/ServiceExtension.appex/Contents/MacOS/ServiceExtension"
+        )
+
+        let decision = engine.evaluateWebUploadOpen(
+            process: whatsappService,
+            filePath: "/Users/alice/Downloads/received-photo.jpg",
+            requestedFlags: UInt32(FWRITE),
+            isRegularFile: true
+        )
+
+        XCTAssertTrue(decision.shouldAllowOpen)
+        XCTAssertFalse(decision.isUploadCandidate)
     }
 
     func testWebUploadEnforcementAllowsDownloadWrite() {

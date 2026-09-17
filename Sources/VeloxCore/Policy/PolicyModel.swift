@@ -125,25 +125,49 @@ public struct ApplicationControlConfig: Codable, Sendable, Equatable {
     }
 }
 
-/// Prototype policy for one-way browser file-transfer control.
+/// Prototype policy for one-way browser and managed native-app file-transfer control.
 ///
 /// The Endpoint Security implementation intentionally protects only regular files
-/// in well-known user content folders. Browser profile data under ~/Library is
+/// in well-known user content folders. Browser/app support data under ~/Library is
 /// never included, and write-only opens remain allowed so downloads can complete.
 public struct WebUploadControlConfig: Codable, Sendable, Equatable {
     public static let defaultProtectedDirectoryNames = [
         "Desktop", "Documents", "Downloads", "Movies", "Music", "Pictures", "Public"
     ]
 
+    /// Exact identities observed in the signed WhatsApp bundle. The main app
+    /// covers attachment picker, drag/drop, and file-paste reads. Its bundled
+    /// extensions are included if either independently reads protected data.
+    public static let defaultNativeUploadClients: [ApplicationRule] = [
+        ApplicationRule(
+            ruleId: "upload-whatsapp-main",
+            signingId: "net.whatsapp.WhatsApp",
+            teamId: "57T9237FN3"
+        ),
+        ApplicationRule(
+            ruleId: "upload-whatsapp-intents",
+            signingId: "net.whatsapp.WhatsApp.Intents",
+            teamId: "57T9237FN3"
+        ),
+        ApplicationRule(
+            ruleId: "upload-whatsapp-service-extension",
+            signingId: "net.whatsapp.WhatsApp.ServiceExtension",
+            teamId: "57T9237FN3"
+        )
+    ]
+
     public let mode: PolicyMode
     public let protectedDirectoryNames: [String]
+    public let nativeUploadClients: [ApplicationRule]
 
     public init(
         mode: PolicyMode = .disabled,
-        protectedDirectoryNames: [String] = WebUploadControlConfig.defaultProtectedDirectoryNames
+        protectedDirectoryNames: [String] = WebUploadControlConfig.defaultProtectedDirectoryNames,
+        nativeUploadClients: [ApplicationRule] = WebUploadControlConfig.defaultNativeUploadClients
     ) {
         self.mode = mode
         self.protectedDirectoryNames = protectedDirectoryNames
+        self.nativeUploadClients = nativeUploadClients
     }
 
     public init(from decoder: Decoder) throws {
@@ -153,6 +177,10 @@ public struct WebUploadControlConfig: Codable, Sendable, Equatable {
             [String].self,
             forKey: .protectedDirectoryNames
         ) ?? Self.defaultProtectedDirectoryNames
+        self.nativeUploadClients = try container.decodeIfPresent(
+            [ApplicationRule].self,
+            forKey: .nativeUploadClients
+        ) ?? Self.defaultNativeUploadClients
     }
 
     public func validate() throws {
@@ -176,6 +204,21 @@ public struct WebUploadControlConfig: Codable, Sendable, Equatable {
             guard seen.insert(trimmed.lowercased()).inserted else {
                 throw PolicyValidationError.invalidCriterion(
                     "Duplicate protected directory name '\(trimmed)'"
+                )
+            }
+        }
+
+        guard nativeUploadClients.count <= 64 else {
+            throw PolicyValidationError.invalidCriterion(
+                "webUploadControl.nativeUploadClients cannot contain more than 64 identities"
+            )
+        }
+        var seenClientRuleIds = Set<String>()
+        for rule in nativeUploadClients {
+            try rule.validate(isAllowRule: true)
+            guard seenClientRuleIds.insert(rule.ruleId).inserted else {
+                throw PolicyValidationError.duplicateRuleId(
+                    "Duplicate native upload-client ruleId '\(rule.ruleId)'"
                 )
             }
         }
@@ -1319,12 +1362,23 @@ public struct VeloxPolicy: Codable, Sendable, Equatable {
         }
 
         if let webUploadObj = jsonObject["webUploadControl"] as? [String: Any] {
-            let validWebUploadKeys: Set<String> = ["mode", "protectedDirectoryNames"]
+            let validWebUploadKeys: Set<String> = [
+                "mode", "protectedDirectoryNames", "nativeUploadClients"
+            ]
             for key in webUploadObj.keys {
                 if !validWebUploadKeys.contains(key) {
                     throw PolicyValidationError.unknownProperty(
                         "Unknown property '\(key)' in webUploadControl"
                     )
+                }
+            }
+            if let nativeClients = webUploadObj["nativeUploadClients"] as? [[String: Any]] {
+                for ruleDict in nativeClients {
+                    for key in ruleDict.keys where !validRuleKeys.contains(key) {
+                        throw PolicyValidationError.unknownProperty(
+                            "Unknown property '\(key)' in webUploadControl native upload client"
+                        )
+                    }
                 }
             }
         }

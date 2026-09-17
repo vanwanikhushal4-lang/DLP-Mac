@@ -188,8 +188,17 @@ function EventRow({ event }) {
   let detail = event.signingId || event.executablePath;
 
   if (isUploadEvent) {
-    appName = event.resourcePath?.split("/").pop() || "Protected file";
-    detail = `${event.signingId || "Browser"} · ${event.resourcePath || "Unknown file"}`;
+    if (event.action === "native-app-network-drop") {
+      const isWhatsApp = event.signingId?.toLowerCase().includes("whatsapp");
+      appName = isWhatsApp ? "WhatsApp outbound transfer" : "Native app outbound transfer";
+      const reason = event.classifications?.length
+        ? event.classifications.join(", ")
+        : "classification pending";
+      detail = `${reason} · encrypted flow stopped`;
+    } else {
+      appName = event.resourcePath?.split("/").pop() || "Protected file";
+      detail = `${event.signingId || "Browser"} · ${event.resourcePath || "Unknown file"}`;
+    }
   } else if (isEmailEvent) {
     appName = event.resourcePath?.split("/").pop() || "Classified attachment";
     detail = `${event.interaction || event.signingId || "Native mail client"} · ${event.classifications?.join(", ") || "Classified content"}`;
@@ -307,7 +316,9 @@ function App() {
       if (event.decision === "blocked") {
         let label = event.executablePath?.split("/").pop() || event.signingId || "Resource";
         if (event.module === "web-upload-control") {
-          label = event.resourcePath?.split("/").pop() || "Protected File";
+          label = event.action === "native-app-network-drop"
+            ? "WhatsApp outbound transfer"
+            : event.resourcePath?.split("/").pop() || "Protected File";
         } else if (event.module === "email-attachment-control") {
           label = event.resourcePath?.split("/").pop() || "Classified attachment";
         } else if (event.module === "clipboard-control") {
@@ -844,6 +855,8 @@ function App() {
   const online = snapshot?.extensionStatus === "enforcing";
   const mode = snapshot?.mode || "audit-only";
   const webUploadMode = snapshot?.webUploadMode || "disabled";
+  const webUploadNativeClientCount = snapshot?.webUploadNativeClientCount || 0;
+  const webUploadNativeClientSigningIds = snapshot?.webUploadNativeClientSigningIds || [];
   const emailAttachmentMode = snapshot?.emailAttachmentMode || "disabled";
   const emailClientCount = snapshot?.emailClientCount || 0;
   const emailProtectedClassifications = snapshot?.emailProtectedClassifications || [];
@@ -991,8 +1004,8 @@ function App() {
     {
       id: "web-upload",
       icon: "web-upload",
-      title: "Web Upload",
-      description: "Outbound browser file protection",
+      title: "Web & App Upload",
+      description: "Browser and WhatsApp file protection",
       status: modeCopy[webUploadMode]?.label || "Unknown",
       detail: `${recentUploadBlocks} recent block${recentUploadBlocks === 1 ? "" : "s"}`,
       tone: webUploadMode === "enforce" ? "secure" : webUploadMode === "audit-only" ? "watching" : "inactive",
@@ -1103,8 +1116,8 @@ function App() {
       subtitle: "Control which applications can run on this endpoint."
     },
     "web-upload": {
-      title: "Web Upload Control",
-      subtitle: "Prevent protected files from leaving this Mac through supported browsers."
+      title: "Web & App Upload Control",
+      subtitle: "Prevent protected files from leaving this Mac through browsers and managed native applications."
     },
     "email": {
       title: "Email Attachment Control",
@@ -1151,7 +1164,7 @@ function App() {
         <nav>
           <button className={activeFeature === "overview" ? "active" : ""} onClick={() => setActiveFeature("overview")}><span>⌂</span>Overview</button>
           <button className={activeFeature === "applications" ? "active" : ""} onClick={() => setActiveFeature("applications")}><span>▦</span>Application Control</button>
-          <button className={activeFeature === "web-upload" ? "active" : ""} onClick={() => setActiveFeature("web-upload")}><span>⇧</span>Web Upload Control</button>
+          <button className={activeFeature === "web-upload" ? "active" : ""} onClick={() => setActiveFeature("web-upload")}><span>⇧</span>Web & App Upload</button>
           <button className={activeFeature === "email" ? "active" : ""} onClick={() => setActiveFeature("email")}><span>✉</span>Email Attachment Control</button>
           <button className={activeFeature === "clipboard" ? "active" : ""} onClick={() => setActiveFeature("clipboard")}><span>▣</span>Clipboard Control</button>
           <button className={activeFeature === "printer" ? "active" : ""} onClick={() => setActiveFeature("printer")}><span>▤</span>Printer Control</button>
@@ -1314,23 +1327,27 @@ function App() {
 
         {activeFeature === "web-upload" && <>
           <section className="summary-grid">
-            <article><span className="card-label">UPLOAD PROTECTION</span><strong>{modeCopy[webUploadMode]?.label}</strong><p>Downloads and normal browser traffic remain allowed.</p></article>
+            <article><span className="card-label">UPLOAD PROTECTION</span><strong>{modeCopy[webUploadMode]?.label}</strong><p>Incoming downloads and message reception remain allowed.</p></article>
             <article><span className="card-label">RECENTLY BLOCKED</span><strong>{recentUploadBlocks}</strong><p>Upload candidates in the current activity window.</p></article>
-            <article><span className="card-label">ENFORCEMENT ENGINE</span><strong className="state-enabled">OS-Level Active</strong><p>Dual-layer kernel AUTH_OPEN + pasteboard guard protect all browsers.</p></article>
+            <article><span className="card-label">MANAGED NATIVE CLIENTS</span><strong>{webUploadNativeClientCount}</strong><p>Signed WhatsApp app and helper identities covered.</p></article>
           </section>
 
           <section className="panel upload-panel">
             <div className="upload-heading">
               <div className="upload-icon">⇧</div>
               <div>
-                <div className="title-with-badge"><h2>Browser upload protection</h2><span>OS-LEVEL DLP</span></div>
-                <p>Stops file-picker, drag/drop and pasted-file uploads across all browsers (Safari, Chrome, Edge, Firefox, Brave) at the OS level. Incoming downloads remain allowed.</p>
+                <div className="title-with-badge"><h2>Browser and WhatsApp upload protection</h2><span>OS-LEVEL DLP</span></div>
+                <p>Stops attachment-picker, drag/drop and pasted-file transfers in supported browsers and the signed WhatsApp Mac app. Incoming downloads and received WhatsApp media remain allowed.</p>
               </div>
             </div>
             <div className="upload-controls">
               <div className="protected-folders">
                 <span>PROTECTED FOLDERS ({protectedFolders.length})</span>
                 <strong>{protectedFolders.join(" · ") || "Standard user folders"}</strong>
+              </div>
+              <div className="protected-folders">
+                <span>NATIVE APP IDENTITIES</span>
+                <strong>{webUploadNativeClientSigningIds.length ? "WhatsApp for Mac · signed main app and extensions" : "No native clients configured"}</strong>
               </div>
               <div className="segmented">
                 {Object.entries(modeCopy).map(([value, copy]) => (
@@ -1341,7 +1358,7 @@ function App() {
           </section>
 
           <section className="panel coverage-panel">
-            <div><span className="coverage-state">ALL BROWSERS ENFORCED</span><h2>Kernel Endpoint Security + Pasteboard Guard</h2><p>Protects Safari, Google Chrome, Microsoft Edge, Mozilla Firefox, Brave, and Opera. File access is intercepted at the kernel level (AUTH_OPEN) and clipboard transfers are intercepted upon browser activation. No browser extensions or user permissions needed.</p></div>
+            <div><span className="coverage-state">BROWSERS + WHATSAPP ENFORCED</span><h2>Kernel Endpoint Security + Pasteboard Guard</h2><p>Protects Safari, Chrome, Edge, Firefox, Brave, Opera, WhatsApp Web/PWAs, and WhatsApp for Mac. Signed file reads are intercepted with AUTH_OPEN; copied-file paste attempts are guarded when a managed destination activates.</p></div>
           </section>
         </>}
 
@@ -1660,10 +1677,10 @@ function App() {
           <section className="panel mode-panel">
             <div>
               <h2>Classified-file egress protection</h2>
-              <p>Make Payment Card Data, Indian Tax Identifier, Indian Identity Data, and Confidential Document files unsharable through USB copy, browser upload, native email, and AirDrop/Bluetooth. An unseen file is held once while on-device classification runs; retrying uses the metadata-bound verdict.</p>
+              <p>Make Payment Card Data, Indian Tax Identifier, Indian Identity Data, and Confidential Document files unsharable through USB copy, browser or WhatsApp upload, native email, and AirDrop/Bluetooth. An unseen file is held once while on-device classification runs; retrying uses the metadata-bound verdict.</p>
               <div className="protected-folders" style={{ marginTop: "14px" }}>
                 <span>PROTECTED CHANNELS</span>
-                <strong>{classifiedEgressChannels.map(value => value === "web-upload" ? "Web upload" : value === "nearby-transfer" ? "AirDrop / Bluetooth" : value.charAt(0).toUpperCase() + value.slice(1)).join(" · ")}</strong>
+                <strong>{classifiedEgressChannels.map(value => value === "web-upload" ? "Web / WhatsApp upload" : value === "nearby-transfer" ? "AirDrop / Bluetooth" : value.charAt(0).toUpperCase() + value.slice(1)).join(" · ")}</strong>
               </div>
               <div className="protected-folders" style={{ marginTop: "10px" }}>
                 <span>BLOCKED CLASSIFICATIONS</span>
@@ -2042,10 +2059,10 @@ function App() {
         </>}
 
         {activeFeature !== "overview" && <section className="panel activity-panel">
-          <div className="panel-heading"><div><h2>Live activity</h2><p>{activeFeature === "usb-storage" ? "Latest USB mount, container, and plaintext-write decisions" : activeFeature === "optical-media" ? "Latest virtual disk-image and physical optical-media mount decisions" : activeFeature === "web-upload" ? "Latest browser file-transfer decisions from Endpoint Security" : activeFeature === "email" ? "Latest classified-file decisions for native mail clients" : activeFeature === "nearby-transfer" ? "Latest AirDrop and Bluetooth protected-file decisions" : activeFeature === "clipboard" ? "Latest clipboard copy decisions from the Velox user-session monitor" : activeFeature === "printer" ? "Latest physical print and PDF file-output decisions" : activeFeature === "ocr" ? "Latest on-device OCR classification decisions" : activeFeature === "discovery" ? "Latest scheduled and on-demand at-rest discovery findings" : activeFeature === "network-flow" ? "Latest outbound socket and network flow decisions from NetworkExtension" : "Latest application execution decisions from Endpoint Security"}</p></div><button className="refresh" onClick={refreshEvents}>Refresh</button></div>
+          <div className="panel-heading"><div><h2>Live activity</h2><p>{activeFeature === "usb-storage" ? "Latest USB mount, container, and plaintext-write decisions" : activeFeature === "optical-media" ? "Latest virtual disk-image and physical optical-media mount decisions" : activeFeature === "web-upload" ? "Latest browser and managed-app file-transfer decisions from Endpoint Security" : activeFeature === "email" ? "Latest classified-file decisions for native mail clients" : activeFeature === "nearby-transfer" ? "Latest AirDrop and Bluetooth protected-file decisions" : activeFeature === "clipboard" ? "Latest clipboard copy decisions from the Velox user-session monitor" : activeFeature === "printer" ? "Latest physical print and PDF file-output decisions" : activeFeature === "ocr" ? "Latest on-device OCR classification decisions" : activeFeature === "discovery" ? "Latest scheduled and on-demand at-rest discovery findings" : activeFeature === "network-flow" ? "Latest outbound socket and network flow decisions from NetworkExtension" : "Latest application execution decisions from Endpoint Security"}</p></div><button className="refresh" onClick={refreshEvents}>Refresh</button></div>
           <div className="event-list">
             {visibleEvents.slice().reverse().slice(0, 12).map(event => <EventRow key={event.eventId} event={event} />)}
-            {!visibleEvents.length && <div className="empty">No {activeFeature === "usb-storage" ? "USB storage" : activeFeature === "optical-media" ? "optical or disk-image mount" : activeFeature === "web-upload" ? "browser upload" : activeFeature === "email" ? "email attachment" : activeFeature === "nearby-transfer" ? "nearby transfer" : activeFeature === "clipboard" ? "clipboard" : activeFeature === "printer" ? "printer" : activeFeature === "ocr" ? "OCR classification" : activeFeature === "discovery" ? "endpoint discovery" : activeFeature === "network-flow" ? "network flow" : "application execution"} events recorded yet.</div>}
+            {!visibleEvents.length && <div className="empty">No {activeFeature === "usb-storage" ? "USB storage" : activeFeature === "optical-media" ? "optical or disk-image mount" : activeFeature === "web-upload" ? "browser or WhatsApp upload" : activeFeature === "email" ? "email attachment" : activeFeature === "nearby-transfer" ? "nearby transfer" : activeFeature === "clipboard" ? "clipboard" : activeFeature === "printer" ? "printer" : activeFeature === "ocr" ? "OCR classification" : activeFeature === "discovery" ? "endpoint discovery" : activeFeature === "network-flow" ? "network flow" : "application execution"} events recorded yet.</div>}
           </div>
         </section>}
         </div>

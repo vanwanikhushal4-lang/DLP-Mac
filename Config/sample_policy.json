@@ -19,6 +19,11 @@
       "Music",
       "Pictures",
       "Public"
+    ],
+    "nativeUploadClients": [
+      { "ruleId": "upload-whatsapp-main", "signingId": "net.whatsapp.WhatsApp", "teamId": "57T9237FN3" },
+      { "ruleId": "upload-whatsapp-intents", "signingId": "net.whatsapp.WhatsApp.Intents", "teamId": "57T9237FN3" },
+      { "ruleId": "upload-whatsapp-service-extension", "signingId": "net.whatsapp.WhatsApp.ServiceExtension", "teamId": "57T9237FN3" }
     ]
   },
   "emailAttachmentControl": {

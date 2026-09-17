@@ -58,6 +58,7 @@ Network Filter decisions are sent over an asynchronous, write-only XPC event sin
 - Printer restoration state: `/Library/Application Support/VeloxMacDLP/printer-state.json`
 - USB container recovery keys: `/Library/Application Support/VeloxMacDLP/usb-container-keys.json`
 - Structured activity log: `/Library/Logs/VeloxMacDLP/events.jsonl`
+- Native-app classified-egress network holds: `/Library/Application Support/VeloxMacDLP/native-egress-network-holds.json`
 - Live diagnostic console: `/Applications/VeloxMacDLP.app/Contents/MacOS/VeloxMacDLP --live-logs`
 - Sensitive screenshot quarantine: `~/Library/Application Support/VeloxMacDLP/Quarantine/Screenshots/`
 - Endpoint discovery reports: `~/Library/Application Support/VeloxMacDLP/Discovery/Reports/`
@@ -136,7 +137,20 @@ Uses `ES_EVENT_TYPE_AUTH_EXEC`. Allow rules override block rules. Critical-syste
 
 ### Web Upload Control
 
-Uses `ES_EVENT_TYPE_AUTH_OPEN` plus the user-session pasteboard guard. It is a prototype heuristic around browser read access; retain download and browser-profile exclusions.
+Uses `ES_EVENT_TYPE_AUTH_OPEN` plus the user-session pasteboard guard. It is a prototype heuristic around outbound read access by supported browsers and policy-configured signed native upload clients. WhatsApp for Mac is bound to its exact signing IDs plus Meta Team ID `57T9237FN3`; WhatsApp Web/PWAs remain covered through the browser identity. Retain download, incoming-media, and application-support/profile exclusions.
+
+Sandboxed native apps can receive file bytes from an Apple document broker before
+their own attributable `AUTH_OPEN`. For configured native upload clients,
+classified-egress enforce mode therefore adds a metadata-only network hold:
+the Endpoint Security extension records the hold after a successful file-open
+denial, and the Network Filter continuously filters that signed client's
+outbound flow. A clean asynchronous classification releases the hold. For
+WhatsApp, a protected verdict quarantines any exact hash-matched broker copy,
+terminates only the still-matching signed client process, and shortens the hold
+to a five-second shutdown tail; remediation failure retains the longer
+fail-closed hold. This is a coarse native-app backstop, not recipient-, chat-,
+or HTTP-upload visibility, and it can temporarily interrupt other traffic in
+the same app.
 
 ### USB Storage Control
 
@@ -177,6 +191,10 @@ The host performs on-device text recognition with Apple Vision for images and im
 Recognized text and image bytes are memory-only. Events may contain a short SHA-256 prefix, file type, rule IDs, classification names, counts, timing, and confidence, but never recognized text or source file paths. Screenshot candidates must originate from Apple's signed screenshot tools. Screenshot enforcement is post-capture remediation: matching images are moved to the per-user quarantine by default, or deleted only when policy explicitly selects deletion. Never describe it as pre-capture prevention.
 
 Classified egress reuses the same rules for USB `AUTH_COPYFILE` operations and read-only opens attributed to supported browsers, configured native mail clients, and known AirDrop/Bluetooth sharing services. In enforce mode an unknown file is denied once, classified asynchronously by the host, then allowed or blocked on retry from the immutable metadata-bound cache. The USB prototype has authoritative source/destination attribution for `AUTH_COPYFILE`; application-specific streaming copies that do not emit that event require separate acceptance coverage.
+
+For policy-configured native upload clients, the Network Filter also enforces
+the shared native-egress hold so a broker-staged attachment cannot escape during
+asynchronous classification. Never inspect, decrypt, or export flow bytes.
 
 ### Endpoint Data Discovery
 

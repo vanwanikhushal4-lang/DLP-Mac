@@ -142,10 +142,39 @@ final class ClassifiedEgressControlTests: XCTestCase {
         ))
     }
 
+    func testAuthenticWhatsAppUsesSameClassifiedWebUploadGate() {
+        let engine = PolicyEngine(policy: policy())
+        let whatsapp = ProcessContext(
+            pid: 102,
+            parentPid: 1,
+            uid: 501,
+            signingId: "net.whatsapp.WhatsApp",
+            teamId: "57T9237FN3",
+            isPlatformBinary: false,
+            cdhash: nil,
+            executablePath: "/Applications/WhatsApp.app/Contents/MacOS/WhatsApp"
+        )
+
+        XCTAssertEqual(engine.classifiedEgressChannelForOpen(
+            process: whatsapp,
+            filePath: path,
+            requestedFlags: UInt32(FREAD),
+            isRegularFile: true
+        ), .webUpload)
+        XCTAssertEqual(engine.webUploadClientKind(process: whatsapp), "native-app")
+
+        let unknown = engine.evaluateClassifiedEgress(channel: .webUpload, classification: nil)
+        XCTAssertFalse(unknown.shouldAllow)
+        XCTAssertTrue(unknown.requiresClassification)
+    }
+
     func testLegacyPolicyDefaultsClassifiedEgressToDisabled() throws {
         let data = Data(#"{"policyVersion":1,"applicationControl":{"mode":"disabled"}}"#.utf8)
         let decoded = try VeloxPolicy.decodeStrict(from: data)
         XCTAssertEqual(decoded.ocrControl.egressMode, .disabled)
         XCTAssertEqual(decoded.ocrControl.protectedEgressChannels, ClassifiedEgressChannel.allCases)
+        XCTAssertTrue(decoded.webUploadControl.nativeUploadClients.contains {
+            $0.signingId == "net.whatsapp.WhatsApp" && $0.teamId == "57T9237FN3"
+        })
     }
 }

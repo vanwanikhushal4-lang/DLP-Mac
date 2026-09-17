@@ -9,10 +9,18 @@ open class FilterDataProvider: NEFilterDataProvider {
     private let logger = Logger(subsystem: "co.velox.macdlp.networkfilter", category: "FilterDataProvider")
     private let policyManager: PolicyManager
     private let eventLogger: EventLogger
+    private let nativeEgressNetworkHoldStore: NativeEgressNetworkHoldStore
+    private let reportedHoldLock = NSLock()
+    private var reportedHoldIds: [String: Int64] = [:]
 
-    public init(policyManager: PolicyManager, eventLogger: EventLogger) {
+    public init(
+        policyManager: PolicyManager,
+        eventLogger: EventLogger,
+        nativeEgressNetworkHoldStore: NativeEgressNetworkHoldStore = NativeEgressNetworkHoldStore()
+    ) {
         self.policyManager = policyManager
         self.eventLogger = eventLogger
+        self.nativeEgressNetworkHoldStore = nativeEgressNetworkHoldStore
         super.init()
     }
 
@@ -22,6 +30,7 @@ open class FilterDataProvider: NEFilterDataProvider {
         let logger = EventLogger(logFilePath: logPath)
         self.eventLogger = logger
         self.policyManager = PolicyManager(policyPath: policyPath, logger: logger)
+        self.nativeEgressNetworkHoldStore = NativeEgressNetworkHoldStore()
         super.init()
     }
 
@@ -156,7 +165,129 @@ open class FilterDataProvider: NEFilterDataProvider {
             return .drop()
         }
 
+        // Keep data callbacks active for exact, policy-configured native upload
+        // clients. A sandboxed document broker can stage an attachment before
+        // the app's own denied AUTH_OPEN; the shared hold closes that gap at
+        // the outbound socket boundary without decrypting or exporting data.
+        if policyManager.policyEngine.webUploadClientKind(process: processContext) == "native-app" {
+            if let hold = activeNativeEgressHold(for: processContext) {
+                recordNativeEgressNetworkDrop(flow: flow, process: processContext, hold: hold)
+                return .drop()
+            }
+            return .filterDataVerdict(
+                withFilterInbound: false,
+                peekInboundBytes: 0,
+                filterOutbound: true,
+                peekOutboundBytes: 1
+            )
+        }
+
         return .allow()
+    }
+
+    override open func handleOutboundData(
+        from flow: NEFilterFlow,
+        readBytesStartOffset offset: Int,
+        readBytes: Data
+    ) -> NEFilterDataVerdict {
+        let process = resolveProcessContext(from: flow.sourceProcessAuditToken)
+        guard policyManager.policyEngine.webUploadClientKind(process: process) == "native-app" else {
+            return .allow()
+        }
+        if let hold = activeNativeEgressHold(for: process) {
+            recordNativeEgressNetworkDrop(flow: flow, process: process, hold: hold)
+            return .drop()
+        }
+
+        // Pass only the bytes already inspected and ask to see the next chunk.
+        // This preserves the ability to stop an existing persistent TLS flow as
+        // soon as Endpoint Security creates a classification hold.
+        return NEFilterDataVerdict(passBytes: readBytes.count, peekBytes: 1)
+    }
+
+    override open func handleOutboundDataComplete(for flow: NEFilterFlow) -> NEFilterDataVerdict {
+        let process = resolveProcessContext(from: flow.sourceProcessAuditToken)
+        if policyManager.policyEngine.webUploadClientKind(process: process) == "native-app",
+           let hold = activeNativeEgressHold(for: process) {
+            recordNativeEgressNetworkDrop(flow: flow, process: process, hold: hold)
+            return .drop()
+        }
+        return .allow()
+    }
+
+    private func activeNativeEgressHold(for process: ProcessContext) -> NativeEgressNetworkHold? {
+        let policy = policyManager.policyEngine.currentPolicy()
+        guard policy.ocrControl.egressMode == .enforce,
+              policy.ocrControl.protectedEgressChannels.contains(.webUpload) else {
+            return nil
+        }
+        return nativeEgressNetworkHoldStore.activeHold(
+            signingId: process.signingId,
+            teamId: process.teamId
+        )
+    }
+
+    private func recordNativeEgressNetworkDrop(
+        flow: NEFilterFlow,
+        process: ProcessContext,
+        hold: NativeEgressNetworkHold
+    ) {
+        guard shouldReportNativeEgressHold(hold) else { return }
+        let policy = policyManager.policyEngine.currentPolicy()
+        let destination: String
+        if let socketFlow = flow as? NEFilterSocketFlow {
+            destination = socketFlow.remoteHostname ?? "encrypted native-app service"
+        } else {
+            destination = "encrypted native-app service"
+        }
+        let event = ExecutionEvent(
+            module: "web-upload-control",
+            action: "native-app-network-drop",
+            decision: "blocked",
+            ruleId: hold.status == .pendingClassification
+                ? "content-egress-classification-required"
+                : "classified-native-app-network-block",
+            policyVersion: policy.policyVersion,
+            executablePath: process.executablePath,
+            signingId: process.signingId,
+            teamId: process.teamId,
+            pid: process.pid,
+            parentPid: process.parentPid,
+            uid: process.uid,
+            decisionLatencyMicros: 1,
+            authResponseResult: "outbound-flow-dropped",
+            resourcePath: destination,
+            interaction: "native-app:\(hold.status.rawValue)",
+            classifications: hold.classifications
+        )
+        eventLogger.logEventAsync(event)
+        NetworkEventForwarder.shared.forward(event)
+        let signingIdentity = process.signingId ?? "unknown"
+        let holdStatus = hold.status.rawValue
+        logger.info(
+            "Dropped native-app outbound flow for signed identity \(signingIdentity, privacy: .public) [Hold: \(holdStatus, privacy: .public)]"
+        )
+    }
+
+    /// One attachment hold can make a native client reconnect to several
+    /// service endpoints. Enforcement still drops every flow, while telemetry
+    /// and user notification are emitted once for that immutable hold ID.
+    private func shouldReportNativeEgressHold(_ hold: NativeEgressNetworkHold) -> Bool {
+        reportedHoldLock.lock()
+        defer { reportedHoldLock.unlock() }
+        let now = NativeEgressNetworkHoldStore.nowMillis()
+        reportedHoldIds = reportedHoldIds.filter { _, expiresAt in expiresAt > now }
+        guard reportedHoldIds[hold.holdId] == nil else { return false }
+        reportedHoldIds[hold.holdId] = hold.expiresAtMillis
+        if reportedHoldIds.count > 512 {
+            reportedHoldIds = Dictionary(
+                uniqueKeysWithValues: reportedHoldIds
+                    .sorted { $0.value > $1.value }
+                    .prefix(512)
+                    .map { ($0.key, $0.value) }
+            )
+        }
+        return true
     }
 
     private func resolveProcessContext(from auditTokenData: Data?) -> ProcessContext {

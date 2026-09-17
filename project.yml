@@ -51,8 +51,8 @@ targets:
       path: Sources/VeloxExtension/Info.plist
       properties:
         CFBundlePackageType: SYSX
-        CFBundleShortVersionString: "1.15.0"
-        CFBundleVersion: "31"
+        CFBundleShortVersionString: "1.16.3"
+        CFBundleVersion: "35"
         NSSystemExtensionUsageDescription: Velox Mac DLP monitors and controls application execution to enforce organizational security policy.
         NSEndpointSecurityMachServiceName: L7US4BH7Q2.co.velox.macdlp.endpointsecurity.xpc
     dependencies:
@@ -85,8 +85,8 @@ targets:
       path: Sources/VeloxSafariUploadGuard/Info.plist
       properties:
         CFBundleDisplayName: Velox DLP Upload Guard
-        CFBundleShortVersionString: "1.15.0"
-        CFBundleVersion: "31"
+        CFBundleShortVersionString: "1.16.3"
+        CFBundleVersion: "35"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.Safari.web-extension
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
@@ -120,8 +120,8 @@ targets:
       path: Sources/VeloxNetworkFilter/Info.plist
       properties:
         CFBundlePackageType: SYSX
-        CFBundleShortVersionString: "1.15.0"
-        CFBundleVersion: "31"
+        CFBundleShortVersionString: "1.16.3"
+        CFBundleVersion: "35"
         NSSystemExtensionUsageDescription: Velox Mac DLP monitors and filters outbound network flow connections according to organizational security policy.
         NetworkExtension:
           NEMachServiceName: $(TeamIdentifierPrefix)co.velox.macdlp.networkfilter.xpc
@@ -168,8 +168,8 @@ targets:
       path: Sources/VeloxApp/Info.plist
       properties:
         CFBundleIconFile: VeloxAppIcon
-        CFBundleShortVersionString: "1.15.0"
-        CFBundleVersion: "31"
+        CFBundleShortVersionString: "1.16.3"
+        CFBundleVersion: "35"
         LSUIElement: true
         SBAppUsesLocalNotifications: true
         NSUserNotificationAlertStyle: alert

@@ -42,6 +42,7 @@ public final class EndpointSecurityService: @unchecked Sendable {
     private let usbEncryptionAccessController: USBEncryptionAccessController
     private let classificationCache: FileClassificationCache
     private let managedVirtualMountAllowance: ManagedVirtualMountAllowance
+    private let nativeEgressNetworkHoldStore: NativeEgressNetworkHoldStore
 
     private let stateLock = os_unfair_lock_t.allocate(capacity: 1)
     private var isRunning: Bool = false
@@ -52,6 +53,10 @@ public final class EndpointSecurityService: @unchecked Sendable {
     private var eventBlockedHandler: (@Sendable (ExecutionEvent) -> Void)?
     private var volumeTopologyChangedHandler: (@Sendable () -> Void)?
     private var screenshotCreatedHandler: (@Sendable (String) -> Void)?
+    private var protectedNativeEgressHoldHandler: (@Sendable (
+        FileClassificationRecord,
+        NativeEgressNetworkHold
+    ) -> Void)?
 
     public var onEventBlocked: (@Sendable (ExecutionEvent) -> Void)? {
         get {
@@ -94,11 +99,39 @@ public final class EndpointSecurityService: @unchecked Sendable {
         }
     }
 
+    /// Runs only after a hold for an already-classified protected file has
+    /// been persisted off the Endpoint Security authorization callback.
+    public var onProtectedNativeEgressHoldCreated: (@Sendable (
+        FileClassificationRecord,
+        NativeEgressNetworkHold
+    ) -> Void)? {
+        get {
+            os_unfair_lock_lock(stateLock)
+            defer { os_unfair_lock_unlock(stateLock) }
+            return protectedNativeEgressHoldHandler
+        }
+        set {
+            os_unfair_lock_lock(stateLock)
+            protectedNativeEgressHoldHandler = newValue
+            os_unfair_lock_unlock(stateLock)
+        }
+    }
+
     private func notifyBlockedIfHandlerPresent(_ event: ExecutionEvent) {
         os_unfair_lock_lock(stateLock)
         let handler = eventBlockedHandler
         os_unfair_lock_unlock(stateLock)
         handler?(event)
+    }
+
+    private func notifyProtectedNativeEgressHold(
+        record: FileClassificationRecord,
+        hold: NativeEgressNetworkHold
+    ) {
+        os_unfair_lock_lock(stateLock)
+        let handler = protectedNativeEgressHoldHandler
+        os_unfair_lock_unlock(stateLock)
+        handler?(record, hold)
     }
 
     public init(
@@ -107,6 +140,7 @@ public final class EndpointSecurityService: @unchecked Sendable {
         usbEncryptionAccessController: USBEncryptionAccessController = USBEncryptionAccessController(),
         classificationCache: FileClassificationCache = FileClassificationCache(),
         managedVirtualMountAllowance: ManagedVirtualMountAllowance = ManagedVirtualMountAllowance(),
+        nativeEgressNetworkHoldStore: NativeEgressNetworkHoldStore = NativeEgressNetworkHoldStore(),
         healthPath: String = "/Library/Application Support/VeloxMacDLP/health.json"
     ) {
         self.policyEngine = policyEngine
@@ -114,6 +148,7 @@ public final class EndpointSecurityService: @unchecked Sendable {
         self.usbEncryptionAccessController = usbEncryptionAccessController
         self.classificationCache = classificationCache
         self.managedVirtualMountAllowance = managedVirtualMountAllowance
+        self.nativeEgressNetworkHoldStore = nativeEgressNetworkHoldStore
         self.healthPath = healthPath
         self.stateLock.initialize(to: os_unfair_lock())
     }
@@ -402,6 +437,9 @@ public final class EndpointSecurityService: @unchecked Sendable {
             case .usb: classifiedModule = "usb-storage-control"
             }
             if egressDecision.matchingRuleId != nil {
+                let webUploadClientKind = egressChannel == .webUpload
+                    ? policyEngine.webUploadClientKind(process: process)
+                    : nil
                 let responseStatus: String
                 if egressDecision.shouldAllow {
                     responseStatus = "deferred-to-channel-policy"
@@ -410,6 +448,24 @@ public final class EndpointSecurityService: @unchecked Sendable {
                     responseStatus = response == ES_RESPOND_RESULT_SUCCESS
                         ? "success"
                         : "failed_code_\(response.rawValue)"
+                    if response == ES_RESPOND_RESULT_SUCCESS,
+                       webUploadClientKind == "native-app" {
+                        let protectedRecord = cachedClassification.flatMap { record in
+                            egressDecision.classifications.isEmpty ? nil : record
+                        }
+                        nativeEgressNetworkHoldStore.beginHoldAsync(
+                            filePath: filePath,
+                            process: process,
+                            policyVersion: egressDecision.policyVersion,
+                            classifications: egressDecision.classifications
+                        ) { [weak self] hold in
+                            guard let protectedRecord else { return }
+                            self?.notifyProtectedNativeEgressHold(
+                                record: protectedRecord,
+                                hold: hold
+                            )
+                        }
+                    }
                 }
                 let event = ExecutionEvent(
                     timestamp: nil,
@@ -431,7 +487,9 @@ public final class EndpointSecurityService: @unchecked Sendable {
                     authResponseResult: responseStatus,
                     resourcePath: filePath,
                     requestedOpenFlags: requestedFlags,
-                    interaction: egressChannel.rawValue,
+                    interaction: egressChannel == .webUpload
+                        ? (webUploadClientKind ?? egressChannel.rawValue)
+                        : egressChannel.rawValue,
                     contentHashPrefix: egressDecision.contentHashPrefix,
                     classifications: egressDecision.classifications
                 )
@@ -461,7 +519,9 @@ public final class EndpointSecurityService: @unchecked Sendable {
                     authResponseResult: "deferred-to-channel-policy",
                     resourcePath: filePath,
                     requestedOpenFlags: requestedFlags,
-                    interaction: egressChannel.rawValue,
+                    interaction: egressChannel == .webUpload
+                        ? (policyEngine.webUploadClientKind(process: process) ?? egressChannel.rawValue)
+                        : egressChannel.rawValue,
                     contentHashPrefix: egressDecision.contentHashPrefix,
                     classifications: []
                 ))
@@ -594,7 +654,7 @@ public final class EndpointSecurityService: @unchecked Sendable {
             timestamp: nil,
             eventId: UUID().uuidString,
             module: "web-upload-control",
-            action: "browser-file-open",
+            action: decision.clientKind == "native-app" ? "native-app-file-open" : "browser-file-open",
             decision: decision.decisionString,
             ruleId: decision.matchingRuleId,
             policyVersion: decision.policyVersion,
@@ -607,7 +667,8 @@ public final class EndpointSecurityService: @unchecked Sendable {
             decisionLatencyMicros: latencyMicros,
             authResponseResult: responseStatus,
             resourcePath: filePath,
-            requestedOpenFlags: requestedFlags
+            requestedOpenFlags: requestedFlags,
+            interaction: decision.clientKind
         )
         logger.logEventAsync(event)
         if decision.decisionString == "blocked" {
